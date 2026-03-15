@@ -18,7 +18,8 @@ class SensorDiscovery:
         # Step 1: Identify candidate sensors
         candidates = []
         for comp in lm_components:
-            for sensor in comp.sensors:
+            for group in comp.groups:
+                for sensor in group.sensors:
                 label = sensor.label.lower()
                 chip = sensor.chip_name.lower()
                 
@@ -54,7 +55,8 @@ class SensorDiscovery:
         # Step 5: Calculate deltas
         mappings = {}
         for comp in updated:
-            for sensor in comp.sensors:
+            for group in comp.groups:
+                for sensor in group.sensors:
                 key = (comp.id, sensor.sensor_id)
                 if key in baselines:
                     delta = sensor.value - baselines[key]
