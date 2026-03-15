@@ -21,7 +21,8 @@ class SensorDiscovery:
             for group in comp.groups:
                 for sensor in group.sensors:
                     label = sensor.label.lower()
-                    chip = sensor.chip_name.lower()
+                    # chip derived from sensor_id prefix
+                    chip = sensor.sensor_id.split("_")[0].lower() if sensor.sensor_id else ""
                     
                     generic_label = any(
                         f"temperature {i}" in label or label.endswith(f"temp{i}")
