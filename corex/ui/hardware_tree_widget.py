@@ -14,11 +14,12 @@ from __future__ import annotations
 from typing import Dict
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QBrush, QClipboard
+from PyQt6.QtGui import QColor, QFont, QFontDatabase, QBrush, QClipboard
 from PyQt6.QtWidgets import (
     QApplication,
     QTreeWidget,
     QTreeWidgetItem,
+    QHeaderView,
     QMenu,
 )
 
@@ -59,6 +60,27 @@ def _value_color(unit: str, value: float) -> str:
     if unit == "RPM":
         return "#4CAF50" if value > 0 else "#F44336"
     return "#E0E0E0"
+
+
+# ---------------------------------------------------------------------------
+# Mono font helper
+# ---------------------------------------------------------------------------
+
+def _get_mono_font(size: int = 12) -> QFont:
+    """Return the best available monospace font from a preferred list."""
+    preferred = [
+        "JetBrains Mono",
+        "Fira Code",
+        "Hack",
+        "Ubuntu Mono",
+        "DejaVu Sans Mono",
+        "Monospace",
+    ]
+    available = QFontDatabase.families()
+    for name in preferred:
+        if name in available:
+            return QFont(name, size)
+    return QFont("Monospace", size)
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +126,14 @@ class HardwareTreeWidget(QTreeWidget):
         # ── columns ────────────────────────────────────────────────────────
         self.setColumnCount(4)
         self.setHeaderLabels(["Sensor", "Current", "Min", "Max"])
+
+        header = self.header()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
+        header.setStretchLastSection(False)
+
         self.setColumnWidth(0, 240)
         self.setColumnWidth(1, 90)
         self.setColumnWidth(2, 90)
@@ -268,9 +298,14 @@ class HardwareTreeWidget(QTreeWidget):
             _fmt(sensor.max_val),
         ])
 
-        font = QFont()
-        font.setPointSize(10)
-        item.setFont(0, font)
+        label_font = QFont()
+        label_font.setPointSize(10)
+        item.setFont(0, label_font)
+
+        # Mono font for value columns (Current, Min, Max)
+        mono_font = _get_mono_font(10)
+        for col in range(1, 4):
+            item.setFont(col, mono_font)
 
         # Colour the value columns
         for col in range(1, 4):

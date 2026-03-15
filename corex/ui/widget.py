@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from PyQt6.QtCore import Qt, pyqtSignal, QPoint
-from PyQt6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QBrush
+from PyQt6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPainterPath, QPen, QBrush
 from PyQt6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -40,6 +40,27 @@ COLOR_GREEN  = "#4CAF50"
 COLOR_YELLOW = "#FFC107"
 COLOR_RED    = "#F44336"
 COLOR_MUTED  = "#E0E0E0"
+
+
+# ---------------------------------------------------------------------------
+# Mono font helper
+# ---------------------------------------------------------------------------
+
+def _get_mono_font(size: int = 12) -> QFont:
+    """Return the best available monospace font from a preferred list."""
+    preferred = [
+        "JetBrains Mono",
+        "Fira Code",
+        "Hack",
+        "Ubuntu Mono",
+        "DejaVu Sans Mono",
+        "Monospace",
+    ]
+    available = QFontDatabase.families()
+    for name in preferred:
+        if name in available:
+            return QFont(name, size)
+    return QFont("Monospace", size)
 
 
 # ---------------------------------------------------------------------------
@@ -137,15 +158,15 @@ class CoreXWidget(QWidget):
         title_row.setSpacing(6)
 
         lbl_title = QLabel("CoreX")
-        font_title = QFont()
+        font_title = _get_mono_font(10)
         font_title.setBold(True)
-        font_title.setPointSize(10)
         lbl_title.setFont(font_title)
         lbl_title.setStyleSheet("color: #1D9E75;")
 
         hostname = socket.gethostname()
         lbl_host = QLabel(hostname)
-        lbl_host.setStyleSheet("color: #666688; font-size: 10px;")
+        lbl_host.setFont(_get_mono_font(10))
+        lbl_host.setStyleSheet("color: #666688;")
 
         spacer = QSpacerItem(0, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
@@ -205,9 +226,7 @@ class CoreXWidget(QWidget):
             row = self._metric_rows[metric_name]
             color = _value_color(unit, value)
             row["value"].setText(_format_value(value, unit))
-            row["value"].setStyleSheet(
-                f"color: {color}; font-family: monospace; font-size: 12px;"
-            )
+            row["value"].setStyleSheet(f"color: {color};")
 
         # Resize height to fit content
         self.adjustSize()
@@ -240,11 +259,10 @@ class CoreXWidget(QWidget):
 
         # Value label — placeholder until first update
         value_label = QLabel("—")
-        value_label.setFixedWidth(70)
+        value_label.setFixedWidth(80)
+        value_label.setFont(_get_mono_font(12))
         value_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        value_label.setStyleSheet(
-            f"color: {COLOR_MUTED}; font-family: monospace; font-size: 12px;"
-        )
+        value_label.setStyleSheet(f"color: {COLOR_MUTED};")
 
         row_layout.addWidget(icon_label)
         row_layout.addWidget(name_label)

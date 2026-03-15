@@ -246,44 +246,35 @@ class CoreXApp:
         app.setPalette(palette)
 
         # ── 2. Load application icon ──────────────────────────────────
-        from PyQt6.QtGui import QIcon, QPixmap
-        from PyQt6.QtCore import QSize
+        from PyQt6.QtGui import QIcon
         import os
-        
-        # Try to find the icon file
-        assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
-        icon_path = os.path.join(assets_dir, 'corex_icon.svg')
-        
-        app_icon = None
-        if os.path.exists(icon_path):
-            # Try to load SVG directly
-            app_icon = QIcon(icon_path)
-            
-            # Force rasterize at multiple sizes for window icon
-            pixmap = QPixmap(icon_path)
-            if not pixmap.isNull():
-                app_icon = QIcon(pixmap)
-            
-            app.setWindowIcon(app_icon)
-        else:
-            # fallback to system icon
-            app_icon = app.style().standardIcon(
-                QStyle.StandardPixmap.SP_ComputerIcon
-            )
-            app.setWindowIcon(app_icon)
+
+        icon_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            'assets', 'corex_icon.svg'
+        )
 
         # ── 3. Create windows ─────────────────────────────────────────
         self.dashboard = CoreXDashboard()
         self.widget    = CoreXWidget()
-        
-        # Set icon on windows
-        if app_icon:
-            self.dashboard.setWindowIcon(app_icon)
-            self.widget.setWindowIcon(app_icon)
 
         # ── 4. Tray icon ──────────────────────────────────────────────
         self.tray = QSystemTrayIcon()
-        self.tray.setIcon(app_icon if app_icon else app.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon))
+
+        if os.path.exists(icon_path):
+            app_icon = QIcon(icon_path)
+            app.setWindowIcon(app_icon)
+            self.tray.setIcon(app_icon)
+            self.dashboard.setWindowIcon(app_icon)
+            self.widget.setWindowIcon(app_icon)
+        else:
+            fallback = app.style().standardIcon(
+                QStyle.StandardPixmap.SP_ComputerIcon
+            )
+            app.setWindowIcon(fallback)
+            self.tray.setIcon(fallback)
+            self.dashboard.setWindowIcon(fallback)
+            self.widget.setWindowIcon(fallback)
 
         tray_menu = QMenu()
         act_dashboard = tray_menu.addAction("🖥️ Show Dashboard")

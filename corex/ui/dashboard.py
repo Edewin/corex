@@ -189,13 +189,23 @@ class CoreXDashboard(QMainWindow):
         main_layout.setSpacing(0)
         
         # Create splitter
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        main_layout.addWidget(splitter)
-        
+        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.splitter.setHandleWidth(6)
+        self.splitter.setChildrenCollapsible(False)
+        self.splitter.setStyleSheet("""
+            QSplitter::handle {
+                background-color: #2a2a4a;
+                border: 1px solid #3a3a6a;
+            }
+            QSplitter::handle:hover {
+                background-color: #1D9E75;
+            }
+        """)
+        main_layout.addWidget(self.splitter)
+
         # Left panel - Hardware tree
         left_panel = QWidget()
-        left_panel.setMinimumWidth(LEFT_PANEL_WIDTH)
-        left_panel.setMaximumWidth(LEFT_PANEL_WIDTH)
+        left_panel.setMinimumWidth(200)
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(8, 8, 8, 8)
         
@@ -206,7 +216,7 @@ class CoreXDashboard(QMainWindow):
         self.tree_widget = HardwareTreeWidget()
         left_layout.addWidget(self.tree_widget)
         
-        splitter.addWidget(left_panel)
+        self.splitter.addWidget(left_panel)
         
         # Right panel - Tabs
         right_panel = QWidget()
@@ -223,10 +233,10 @@ class CoreXDashboard(QMainWindow):
         self._create_gpu_tab()
         self._create_network_tab()
         
-        splitter.addWidget(right_panel)
+        self.splitter.addWidget(right_panel)
         
         # Set splitter sizes
-        splitter.setSizes([LEFT_PANEL_WIDTH, WINDOW_WIDTH - LEFT_PANEL_WIDTH])
+        self.splitter.setSizes([320, 960])
         
         # Create status bar
         self._setup_status_bar()
