@@ -5,13 +5,16 @@ Reads CPU data from /proc/cpuinfo and /proc/stat.
 Returns data structured using models.py classes.
 """
 
+import json
 import os
 import re
+import subprocess
 import time
 from typing import List, Optional
 from dataclasses import replace
 
 from ..models import Sensor, SensorGroup, HardwareComponent
+from .chip_registry import translate_label
 
 
 def get_cpu_name() -> str:
@@ -254,26 +257,92 @@ def get_cpu_frequencies() -> SensorGroup:
     return SensorGroup(name="Frequencies", icon="⚡", sensors=sensors)
 
 
+def get_cpu_temperatures() -> Optional[SensorGroup]:
+    """
+    Reads CPU temperatures directly from lm-sensors,
+    without going through lm_reader.py merge logic.
+
+    Tries multiple chip names in order:
+      1. coretemp (Intel)
+      2. k10temp (AMD)
+      3. zenpower (AMD alternative)
+
+    Returns:
+        SensorGroup with temperature sensors, or None if not found.
+    """
+    try:
+        result = subprocess.run(
+            ['sensors', '-j'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        data = json.loads(result.stdout)
+
+        for chip_key, chip_data in data.items():
+            base = chip_key.split('-')[0]
+            if base in ['coretemp', 'k10temp', 'zenpower']:
+                group = SensorGroup(
+                    name='Temperatures',
+                    icon='🌡️',
+                    sensors=[]
+                )
+                for feature_name, feature_data in chip_data.items():
+                    if feature_name == 'Adapter':
+                        continue
+                    if not isinstance(feature_data, dict):
+                        continue
+                    for subkey, value in feature_data.items():
+                        if subkey.endswith('_input'):
+                            human_label, emoji = translate_label(
+                                base, feature_name)
+                            sensor = Sensor(
+                                label=f'{emoji} {human_label}',
+                                value=float(value),
+                                unit='°C',
+                                min_val=float(value),
+                                max_val=float(value),
+                                sensor_id=f'cpu_temp_{feature_name}'
+                            )
+                            group.sensors.append(sensor)
+                            break
+                if group.sensors:
+                    return group
+    except FileNotFoundError:
+        pass
+    except subprocess.TimeoutExpired:
+        pass
+    except (json.JSONDecodeError, Exception):
+        pass
+    return None
+
+
 def build_cpu_component() -> HardwareComponent:
     """
     Builds a complete CPU hardware component.
-    
+
     Returns:
         HardwareComponent representing the CPU with sensor groups.
-        
-    Note: Temperature group will be merged in later by lm_reader.py
-          do NOT read temperatures here.
     """
-    cpu_name = get_cpu_name()
     usage_group = get_cpu_usage()
     freq_group = get_cpu_frequencies()
-    
+
+    groups = []
+
+    # Get temperatures FIRST (most important)
+    temp_group = get_cpu_temperatures()
+    if temp_group:
+        groups.append(temp_group)
+
+    groups.append(usage_group)
+    groups.append(freq_group)
+
     return HardwareComponent(
-        name=cpu_name,
-        component_type="CPU",
-        icon="🔲",
-        chip_name="cpu",
-        groups=[usage_group, freq_group],
+        name=get_cpu_name(),
+        component_type='CPU',
+        chip_name='cpu',
+        icon='🔲',
+        groups=groups,
         collapsed=False
     )
 

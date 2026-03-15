@@ -246,29 +246,22 @@ def get_all_lm_components(
             return []
         
         # Parse the output
-        components = parse_sensors_output(result.stdout)
-        
-        # If CPU component is provided, merge temperatures
+        all_components = parse_sensors_output(result.stdout)
+
+        # CPU temp chips are now handled directly by cpu.py — exclude them here
+        CPU_TEMP_CHIPS = ['coretemp', 'k10temp', 'zenpower']
+        non_cpu_components = [
+            c for c in all_components
+            if not any(chip in c.chip_name for chip in CPU_TEMP_CHIPS)
+        ]
+
+        # If CPU component is provided, merge temperatures (legacy path kept
+        # for callers that still pass cpu_component, but temperatures are
+        # already embedded by build_cpu_component() so we just prepend it)
         if cpu_component is not None:
-            # Create a copy of the CPU component to modify
-            merged_cpu = replace(cpu_component)
-            merged_cpu = merge_cpu_temperatures(merged_cpu, components)
-            
-            # Filter out CPU temperature chips from lm components
-            cpu_temp_chips = ["coretemp", "k10temp"]
-            filtered_components = []
-            for comp in components:
-                # Check if this component contains any CPU temp chip name
-                should_include = True
-                if any(name in comp.chip_name for name in cpu_temp_chips):
-                    should_include = False
-                if should_include:
-                    filtered_components.append(comp)
-            
-            # Return merged CPU + other components
-            return [merged_cpu] + filtered_components
+            return [cpu_component] + non_cpu_components
         else:
-            return components
+            return non_cpu_components
             
     except FileNotFoundError:
         print("Warning: 'sensors' command not found. Is lm-sensors installed?")
