@@ -121,7 +121,8 @@ def translate_label(chip_name: str, raw_label: str) -> Tuple[str, str]:
            return ("Fan (unidentified)", "🌀")
         4. If no match and label starts with "in" →
            return ("Voltage (unidentified)", "⚡")
-        5. Truly unknown → ("Unknown Sensor", "❓")
+        5. Apply chip-specific pattern matching
+        6. Truly unknown → ("Unknown Sensor", "❓")
     """
     # Step 1: Check for exact match
     if raw_label in LABEL_TRANSLATIONS:
@@ -139,7 +140,49 @@ def translate_label(chip_name: str, raw_label: str) -> Tuple[str, str]:
     if raw_label.startswith("in"):
         return ("Voltage (unidentified)", "⚡")
     
-    # Step 5: Truly unknown
+    # Step 5: Apply chip-specific pattern matching
+    label_lower = raw_label.lower()
+    
+    # Intel coretemp patterns
+    if chip_name in ['coretemp', 'k10temp']:
+        
+        # "Package id 0" → "CPU Package"
+        if label_lower.startswith('package'):
+            return ("CPU Package", "🌡️")
+        
+        # "Core 0", "Core 1" etc → keep as-is with emoji
+        if label_lower.startswith('core '):
+            return (raw_label, "🌡️")
+        
+        # "Tdie", "Tctl" AMD variants
+        if raw_label in ['Tdie', 'Tctl']:
+            return ("CPU Temperature", "🌡️")
+        
+        # "Tccd1", "Tccd2" AMD core complex
+        if raw_label.startswith('Tccd'):
+            num = raw_label.replace('Tccd', '')
+            return (f"CPU Core Complex {num}", "🌡️")
+
+    # thinkpad chip (ThinkPad laptops)
+    if 'thinkpad' in chip_name.lower():
+        if label_lower.startswith('cpu'):
+            return ("CPU Temperature", "🌡️")
+        if label_lower.startswith('gpu'):
+            return ("GPU Temperature", "🌡️")
+        if label_lower.startswith('fan'):
+            num = ''.join(filter(str.isdigit, raw_label)) or '1'
+            return (f"Fan {num}", "🌀")
+        # Generic thinkpad temp
+        if label_lower.startswith('temp') or \
+           any(c.isdigit() for c in raw_label):
+            return (raw_label, "🌡️")
+
+    # pch_skylake, pch_cannonlake etc (Intel PCH)
+    if label_lower.startswith('pch') or \
+       'skylake' in chip_name or 'cannonlake' in chip_name:
+        return ("PCH Temperature", "🌡️")
+    
+    # Step 6: Truly unknown
     return ("Unknown Sensor", "❓")
 
 

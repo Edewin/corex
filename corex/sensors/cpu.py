@@ -266,6 +266,7 @@ def get_cpu_temperatures() -> Optional[SensorGroup]:
       1. coretemp (Intel)
       2. k10temp (AMD)
       3. zenpower (AMD alternative)
+      4. thinkpad (ThinkPad laptops)
 
     Returns:
         SensorGroup with temperature sensors, or None if not found.
@@ -281,7 +282,7 @@ def get_cpu_temperatures() -> Optional[SensorGroup]:
 
         for chip_key, chip_data in data.items():
             base = chip_key.split('-')[0]
-            if base in ['coretemp', 'k10temp', 'zenpower']:
+            if base in ['coretemp', 'k10temp', 'zenpower', 'thinkpad']:
                 group = SensorGroup(
                     name='Temperatures',
                     icon='🌡️',

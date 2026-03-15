@@ -186,13 +186,13 @@ def merge_cpu_temperatures(
         Modified cpu_component with temperature group added at index 0
         
     Logic:
-        - Finds components where chip_name contains "coretemp" or "k10temp" in lm_components
+        - Finds components where chip_name contains "coretemp", "k10temp", or "thinkpad" in lm_components
         - Extracts their "Temperatures" SensorGroup
         - Adds that group to cpu_component.groups (insert at index 0 — temperatures first)
         - Returns modified cpu_component
         - If no CPU temp chip found → returns cpu_component unchanged
     """
-    cpu_temp_chips = ["coretemp", "k10temp"]
+    cpu_temp_chips = ["coretemp", "k10temp", "thinkpad"]
     
     for component in lm_components:
         if any(name in component.chip_name for name in cpu_temp_chips):
@@ -249,7 +249,7 @@ def get_all_lm_components(
         all_components = parse_sensors_output(result.stdout)
 
         # CPU temp chips are now handled directly by cpu.py — exclude them here
-        CPU_TEMP_CHIPS = ['coretemp', 'k10temp', 'zenpower']
+        CPU_TEMP_CHIPS = ['coretemp', 'k10temp', 'zenpower', 'thinkpad']
         non_cpu_components = [
             c for c in all_components
             if not any(chip in c.chip_name for chip in CPU_TEMP_CHIPS)
