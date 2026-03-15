@@ -430,42 +430,26 @@ def _try_sysfs_backend() -> List[HardwareComponent]:
             
             # ===== GPU Utilization (AMD GPUs) =====
             # Try to read GPU utilization from gpu_busy_percent file
-            gpu_busy_path = os.path.join(card_path, "device", "gpu_busy_percent")
-            gpu_busy_value = _read_sysfs_file(gpu_busy_path)
+            util_path = os.path.join(card_path, "gpu_busy_percent")
+            util_value = _read_sysfs_file(util_path)
             
-            if gpu_busy_value:
+            if util_value:
                 try:
-                    gpu_util = int(gpu_busy_value)
-                    
-                    util_sensor = Sensor(
+                    value = int(util_value)
+                    util_group = SensorGroup("Utilization", "📊")
+                    util_group.sensors.append(Sensor(
                         label="📊 GPU",
-                        value=float(gpu_util),
+                        value=float(value),
                         unit="%",
-                        min_val=float(gpu_util),
-                        max_val=float(gpu_util),
-                        sensor_id=f"sysfs_card{card_num}_gpu_util"
-                    )
-                    
-                    # Check if Utilization group already exists
-                    util_group = None
-                    for group in component.groups:
-                        if group.name == "Utilization":
-                            util_group = group
-                            break
-                    
-                    if util_group is None:
-                        util_group = SensorGroup(
-                            name="Utilization",
-                            icon="📊",
-                            sensors=[util_sensor]
-                        )
-                        component.groups.append(util_group)
-                    else:
-                        util_group.sensors.append(util_sensor)
+                        min_val=float(value),
+                        max_val=float(value),
+                        sensor_id=f"gpu_card{card_num}_util"
+                    ))
+                    component.groups.insert(0, util_group)
                 except (ValueError, TypeError):
                     pass  # Invalid utilization value
             
-            # Also try to read from debugfs for more detailed info (requires root)
+            # Also try this path as fallback (requires root)
             debugfs_path = f"/sys/kernel/debug/dri/{card_num}/amdgpu_pm_info"
             debugfs_value = _read_sysfs_file(debugfs_path)
             # Note: We don't parse amdgpu_pm_info here as it's complex text format

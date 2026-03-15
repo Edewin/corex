@@ -246,27 +246,24 @@ class CoreXApp:
         app.setPalette(palette)
 
         # ── 2. Load application icon ──────────────────────────────────
-        from PyQt6.QtGui import QIcon
+        from PyQt6.QtGui import QIcon, QPixmap
         from PyQt6.QtCore import QSize
         import os
         
-        # Try to find the icon file (check both possible names)
+        # Try to find the icon file
         assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
-        icon_path = None
-        
-        # First try icon.svg (as specified in requirements)
-        icon_path1 = os.path.join(assets_dir, 'icon.svg')
-        if os.path.exists(icon_path1):
-            icon_path = icon_path1
-        else:
-            # Fallback to corex_icon.svg (actual file name)
-            icon_path2 = os.path.join(assets_dir, 'corex_icon.svg')
-            if os.path.exists(icon_path2):
-                icon_path = icon_path2
+        icon_path = os.path.join(assets_dir, 'corex_icon.svg')
         
         app_icon = None
-        if icon_path and os.path.exists(icon_path):
+        if os.path.exists(icon_path):
+            # Try to load SVG directly
             app_icon = QIcon(icon_path)
+            
+            # Force rasterize at multiple sizes for window icon
+            pixmap = QPixmap(icon_path)
+            if not pixmap.isNull():
+                app_icon = QIcon(pixmap)
+            
             app.setWindowIcon(app_icon)
         else:
             # fallback to system icon
@@ -279,9 +276,10 @@ class CoreXApp:
         self.dashboard = CoreXDashboard()
         self.widget    = CoreXWidget()
         
-        # Set icon on dashboard window
+        # Set icon on windows
         if app_icon:
             self.dashboard.setWindowIcon(app_icon)
+            self.widget.setWindowIcon(app_icon)
 
         # ── 4. Tray icon ──────────────────────────────────────────────
         self.tray = QSystemTrayIcon()
