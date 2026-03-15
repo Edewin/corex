@@ -75,6 +75,9 @@ CHIP_REGISTRY: Dict[str, Dict[str, Any]] = {
 # Maps raw kernel labels to (human_name, emoji) tuples
 LABEL_TRANSLATIONS: Dict[str, Tuple[str, str]] = {
     # Temperatures
+    "Tctl": ("CPU Temperature (Tctl)", "🌡️"),
+    "Tccd1": ("CPU Core Complex 1", "🌡️"),
+    "Tccd2": ("CPU Core Complex 2", "🌡️"),
     "SYSTIN": ("System Temperature", "🌡️"),
     "CPUTIN": ("CPU Temperature (Socket)", "🌡️"),
     "AUXTIN0": ("Auxiliary Temperature", "🌡️"),
@@ -184,7 +187,10 @@ if __name__ == "__main__":
     
     # Test translate_label function
     # Exact matches
+    assert translate_label("coretemp", "Tctl") == ("CPU Temperature (Tctl)", "🌡️"), "Tctl should be translated"
     assert translate_label("coretemp", "SYSTIN") == ("System Temperature", "🌡️")
+    assert translate_label("coretemp", "fan1") == ("CPU Fan", "🌀")
+    assert translate_label("coretemp", "in0") == ("CPU Vcore", "⚡")
     assert translate_label("coretemp", "fan1") == ("CPU Fan", "🌀")
     assert translate_label("coretemp", "in0") == ("CPU Vcore", "⚡")
     

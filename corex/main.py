@@ -245,15 +245,47 @@ class CoreXApp:
         palette.setColor(QPalette.ColorRole.Highlight,   QColor(29, 158, 117))
         app.setPalette(palette)
 
-        # ── 2. Create windows ─────────────────────────────────────────
+        # ── 2. Load application icon ──────────────────────────────────
+        from PyQt6.QtGui import QIcon
+        from PyQt6.QtCore import QSize
+        import os
+        
+        # Try to find the icon file (check both possible names)
+        assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
+        icon_path = None
+        
+        # First try icon.svg (as specified in requirements)
+        icon_path1 = os.path.join(assets_dir, 'icon.svg')
+        if os.path.exists(icon_path1):
+            icon_path = icon_path1
+        else:
+            # Fallback to corex_icon.svg (actual file name)
+            icon_path2 = os.path.join(assets_dir, 'corex_icon.svg')
+            if os.path.exists(icon_path2):
+                icon_path = icon_path2
+        
+        app_icon = None
+        if icon_path and os.path.exists(icon_path):
+            app_icon = QIcon(icon_path)
+            app.setWindowIcon(app_icon)
+        else:
+            # fallback to system icon
+            app_icon = app.style().standardIcon(
+                QStyle.StandardPixmap.SP_ComputerIcon
+            )
+            app.setWindowIcon(app_icon)
+
+        # ── 3. Create windows ─────────────────────────────────────────
         self.dashboard = CoreXDashboard()
         self.widget    = CoreXWidget()
+        
+        # Set icon on dashboard window
+        if app_icon:
+            self.dashboard.setWindowIcon(app_icon)
 
-        # ── 3. Tray icon ──────────────────────────────────────────────
+        # ── 4. Tray icon ──────────────────────────────────────────────
         self.tray = QSystemTrayIcon()
-        self.tray.setIcon(
-            app.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
-        )
+        self.tray.setIcon(app_icon if app_icon else app.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon))
 
         tray_menu = QMenu()
         act_dashboard = tray_menu.addAction("🖥️ Show Dashboard")

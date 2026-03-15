@@ -28,20 +28,21 @@ def parse_sensors_output(raw_json: str) -> List[HardwareComponent]:
     Logic:
         1. Parse JSON string
         2. For each chip in JSON:
-            a. Call get_chip_metadata(chip_name) for metadata
-            b. Group features by type into SensorGroups:
+            a. Extract base chip name (before dash)
+            b. Call get_chip_metadata(chip_name) for metadata
+            c. Group features by type into SensorGroups:
                 - features containing "_input" + type temp → "Temperatures"
                 - features containing "_input" + type fan → "Fans"
                 - features containing "_input" + type in → "Voltages"
                 - features containing "_input" + type power → "Power"
-            c. For each feature call translate_label(chip_name, label)
+            d. For each feature call translate_label(chip_name, label)
                 → returns (human_name, emoji)
                 → Sensor.label = f"{emoji} {human_name}"
                 → sensor_id = f"{chip_name}_{feature_name}"
-            d. Skip sensors with value 0.0 AND type "in" (voltages)
-            e. Fan speed 0 RPM → prefix label with "⚠️ "
+            e. Skip sensors with value 0.0 AND type "in" (voltages)
+            f. Fan speed 0 RPM → prefix label with "⚠️ "
                e.g. "⚠️ 🌀 Chassis Fan 2"
-            f. Create HardwareComponent per chip using metadata
+            g. Create HardwareComponent per chip using metadata
     """
     try:
         data = json.loads(raw_json)
@@ -51,8 +52,13 @@ def parse_sensors_output(raw_json: str) -> List[HardwareComponent]:
     components = []
     
     for chip_name, chip_data in data.items():
-        # Get metadata for this chip
-        metadata = get_chip_metadata(chip_name)
+        # Extract base chip name (before dash)
+        # Example: "k10temp-pci-00c3" → "k10temp"
+        # Example: "nct6795-isa-0290" → "nct6795"
+        base_chip_name = chip_name.split('-')[0]
+        
+        # Get metadata for this chip using base name
+        metadata = get_chip_metadata(base_chip_name)
         
         # Initialize sensor groups
         groups = {
@@ -150,11 +156,11 @@ def parse_sensors_output(raw_json: str) -> List[HardwareComponent]:
                     sensors=sensors
                 ))
         
-        # Create HardwareComponent
+        # Create HardwareComponent with base chip name
         component = HardwareComponent(
             name=metadata["name_hint"],
             component_type=metadata["group"],
-            chip_name=chip_name,
+            chip_name=base_chip_name,
             icon=metadata["component_icon"],
             groups=sensor_groups,
             collapsed=False
@@ -180,7 +186,7 @@ def merge_cpu_temperatures(
         Modified cpu_component with temperature group added at index 0
         
     Logic:
-        - Finds components where chip_name in ["coretemp", "k10temp"] in lm_components
+        - Finds components where chip_name contains "coretemp" or "k10temp" in lm_components
         - Extracts their "Temperatures" SensorGroup
         - Adds that group to cpu_component.groups (insert at index 0 — temperatures first)
         - Returns modified cpu_component
@@ -189,16 +195,12 @@ def merge_cpu_temperatures(
     cpu_temp_chips = ["coretemp", "k10temp"]
     
     for component in lm_components:
-        # Check if chip_name starts with any CPU temp chip name
-        # (e.g., "coretemp-isa-0000" starts with "coretemp")
-        for chip_prefix in cpu_temp_chips:
-            if component.chip_name.startswith(chip_prefix):
-                # Find the Temperatures group
-                for group in component.groups:
-                    if group.name == "Temperatures":
-                        # Insert at index 0 (temperatures first)
-                        cpu_component.groups.insert(0, group)
-                        return cpu_component
+        if any(name in component.chip_name for name in cpu_temp_chips):
+            for group in component.groups:
+                if group.name == "Temperatures":
+                    cpu_component.groups.insert(0, group)
+                    print(f"DEBUG: merged {len(group.sensors)} temp sensors into CPU")
+                    return cpu_component
     
     # No CPU temperature chip found
     return cpu_component
@@ -256,12 +258,10 @@ def get_all_lm_components(
             cpu_temp_chips = ["coretemp", "k10temp"]
             filtered_components = []
             for comp in components:
-                # Check if this component starts with any CPU temp chip name
+                # Check if this component contains any CPU temp chip name
                 should_include = True
-                for chip_prefix in cpu_temp_chips:
-                    if comp.chip_name.startswith(chip_prefix):
-                        should_include = False
-                        break
+                if any(name in comp.chip_name for name in cpu_temp_chips):
+                    should_include = False
                 if should_include:
                     filtered_components.append(comp)
             
