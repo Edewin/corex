@@ -46,3 +46,16 @@ Eduard Soltuzu
 
 ## License
 MIT
+## Screenshots
+
+### Widget over a game
+![CoreX widget over SuperTuxKart](corex/assets/screenshots/corex_widget.gif)
+
+### Dashboard with live charts
+![CoreX dashboard](corex/assets/screenshots/dashboard.gif)
+
+### Hardware Tree — HWiNFO style
+![CoreX hardware tree](corex/assets/screenshots/corex_dashboard_tree.png)
+
+### System tray
+![CoreX system tray](corex/assets/screenshots/corex_systray.png)
