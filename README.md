@@ -38,9 +38,6 @@ sensor names, and live charts for all components.
   cd corex
   PYTHONPATH=. python3 corex/main.py
 
-## Screenshots
-Coming soon.
-
 ## Author
 Eduard Soltuzu
 
