@@ -85,7 +85,7 @@ def parse_sensors_output(raw_json: str) -> List[HardwareComponent]:
                     if not sensor_key.endswith("_input"):
                         continue
                     
-                    # Determine sensor type based on feature name
+                    # Determine sensor type based on feature name AND sensor key
                     sensor_type = "Other"
                     if "temp" in feature_name.lower():
                         sensor_type = "Temperatures"
@@ -95,6 +95,9 @@ def parse_sensors_output(raw_json: str) -> List[HardwareComponent]:
                         sensor_type = "Voltages"
                     elif "power" in feature_name.lower():
                         sensor_type = "Power"
+                    # ThinkPad special: CPU/GPU labels contain temp_input
+                    elif "temp" in sensor_key.lower():
+                        sensor_type = "Temperatures"
                     
                     # Skip voltage sensors with value 0.0
                     if sensor_type == "Voltages" and sensor_value == 0.0:
