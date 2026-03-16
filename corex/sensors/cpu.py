@@ -295,6 +295,9 @@ def get_cpu_temperatures() -> Optional[SensorGroup]:
                         continue
                     for subkey, value in feature_data.items():
                         if subkey.endswith('_input'):
+                            # Skip fan sensors — only temperatures here
+                            if 'fan' in subkey.lower() or 'fan' in feature_name.lower():
+                                break
                             human_label, emoji = translate_label(
                                 base, feature_name)
                             sensor = Sensor(
