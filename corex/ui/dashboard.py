@@ -12,7 +12,7 @@ from collections import defaultdict, deque
 from typing import Dict, List, Optional
 
 import pyqtgraph as pg
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QPalette
 from PyQt6.QtWidgets import (
     QApplication,
@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QPushButton,
     QSplitter,
     QTabWidget,
     QVBoxLayout,
@@ -118,6 +119,9 @@ def get_color_for_value(value: float, unit: str = "%") -> str:
 class CoreXDashboard(QMainWindow):
     """Main dashboard window for CoreX hardware monitoring."""
     
+    # Signals
+    show_widget = pyqtSignal()  # Emitted when "Show Widget" button is clicked
+    
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         
@@ -180,15 +184,53 @@ class CoreXDashboard(QMainWindow):
         
     def _setup_ui(self) -> None:
         """Setup the main UI layout."""
-        # Create central splitter
+        # Create central widget with vertical layout
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        main_layout = QHBoxLayout(central_widget)
+        main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
-        # Create splitter
+        # Create toolbar row at the top
+        toolbar_widget = QWidget()
+        toolbar_layout = QHBoxLayout(toolbar_widget)
+        toolbar_layout.setContentsMargins(8, 8, 8, 8)
+        toolbar_layout.setSpacing(8)
+        
+        # Add spacer to push button to the right
+        toolbar_layout.addStretch(1)
+        
+        # Create "Show Widget" button
+        self.show_widget_button = QPushButton("📌 Show Widget")
+        self.show_widget_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2a2a4a;
+                color: #e0e0e0;
+                border: 1px solid #3a3a6a;
+                border-radius: 4px;
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background-color: #3a3a6a;
+                border-color: #1D9E75;
+            }
+            QPushButton:pressed {
+                background-color: #1D9E75;
+            }
+        """)
+        self.show_widget_button.clicked.connect(self.show_widget.emit)
+        toolbar_layout.addWidget(self.show_widget_button)
+        
+        main_layout.addWidget(toolbar_widget)
+        
+        # Create splitter for the main content area
+        content_widget = QWidget()
+        content_layout = QHBoxLayout(content_widget)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+        
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setHandleWidth(6)
         self.splitter.setChildrenCollapsible(False)
@@ -201,7 +243,7 @@ class CoreXDashboard(QMainWindow):
                 background-color: #1D9E75;
             }
         """)
-        main_layout.addWidget(self.splitter)
+        content_layout.addWidget(self.splitter)
 
         # Left panel - Hardware tree
         left_panel = QWidget()
@@ -237,6 +279,8 @@ class CoreXDashboard(QMainWindow):
         
         # Set splitter sizes
         self.splitter.setSizes([320, 960])
+        
+        main_layout.addWidget(content_widget, 1)  # 1 = stretch factor
         
         # Create status bar
         self._setup_status_bar()

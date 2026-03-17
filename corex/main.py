@@ -258,7 +258,10 @@ class CoreXApp:
         self.dashboard = CoreXDashboard()
         self.widget    = CoreXWidget()
 
-        # ── 4. Tray icon ──────────────────────────────────────────────
+        # ── 4. Connect dashboard signal to widget ─────────────────────
+        self.dashboard.show_widget.connect(self.widget.show)
+
+        # ── 5. Tray icon ──────────────────────────────────────────────
         # Optional tray initialization - wrapped in try/except to fail silently
         try:
             self.tray = QSystemTrayIcon()
