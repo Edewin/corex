@@ -259,45 +259,50 @@ class CoreXApp:
         self.widget    = CoreXWidget()
 
         # ── 4. Tray icon ──────────────────────────────────────────────
-        self.tray = QSystemTrayIcon()
+        # Optional tray initialization - wrapped in try/except to fail silently
+        try:
+            self.tray = QSystemTrayIcon()
 
-        if os.path.exists(icon_path):
-            app_icon = QIcon(icon_path)
-            app.setWindowIcon(app_icon)
-            self.tray.setIcon(app_icon)
-            self.dashboard.setWindowIcon(app_icon)
-            self.widget.setWindowIcon(app_icon)
-        else:
-            fallback = app.style().standardIcon(
-                QStyle.StandardPixmap.SP_ComputerIcon
-            )
-            app.setWindowIcon(fallback)
-            self.tray.setIcon(fallback)
-            self.dashboard.setWindowIcon(fallback)
-            self.widget.setWindowIcon(fallback)
+            if os.path.exists(icon_path):
+                app_icon = QIcon(icon_path)
+                app.setWindowIcon(app_icon)
+                self.tray.setIcon(app_icon)
+                self.dashboard.setWindowIcon(app_icon)
+                self.widget.setWindowIcon(app_icon)
+            else:
+                fallback = app.style().standardIcon(
+                    QStyle.StandardPixmap.SP_ComputerIcon
+                )
+                app.setWindowIcon(fallback)
+                self.tray.setIcon(fallback)
+                self.dashboard.setWindowIcon(fallback)
+                self.widget.setWindowIcon(fallback)
 
-        tray_menu = QMenu()
-        act_dashboard = tray_menu.addAction("🖥️ Show Dashboard")
-        act_widget    = tray_menu.addAction("📌 Show Widget")
-        tray_menu.addSeparator()
-        act_quit      = tray_menu.addAction("❌ Quit CoreX")
+            tray_menu = QMenu()
+            act_dashboard = tray_menu.addAction("🖥️ Show Dashboard")
+            act_widget    = tray_menu.addAction("📌 Show Widget")
+            tray_menu.addSeparator()
+            act_quit      = tray_menu.addAction("❌ Quit CoreX")
 
-        act_dashboard.triggered.connect(lambda: (
-            self.dashboard.show(),
-            self.dashboard.raise_()
-        ))
-        act_widget.triggered.connect(lambda: (
-            self.widget.show(),
-            self.widget.raise_()
-        ))
-        act_quit.triggered.connect(self.quit)
+            act_dashboard.triggered.connect(lambda: (
+                self.dashboard.show(),
+                self.dashboard.raise_()
+            ))
+            act_widget.triggered.connect(lambda: (
+                self.widget.show(),
+                self.widget.raise_()
+            ))
+            act_quit.triggered.connect(self.quit)
 
-        self.tray.setContextMenu(tray_menu)
-        self.tray.setToolTip("CoreX Hardware Monitor")
-        self.tray.show()
+            self.tray.setContextMenu(tray_menu)
+            self.tray.setToolTip("CoreX Hardware Monitor")
+            self.tray.show()
 
-        # Double-click tray → show dashboard
-        self.tray.activated.connect(self._on_tray_activated)
+            # Double-click tray → show dashboard
+            self.tray.activated.connect(self._on_tray_activated)
+        except Exception:
+            # Tray initialization failed - continue without tray functionality
+            self.tray = None
 
         # ── 4. Connect widget signals ─────────────────────────────────
         self.widget.open_dashboard.connect(
@@ -312,8 +317,8 @@ class CoreXApp:
         self.poller.status_update.connect(self.dashboard.set_sensor_status)
         self.poller.start()
 
-        # ── 6. Show widget immediately; dashboard stays hidden ────────
-        self.widget.show()
+        # ── 6. Show dashboard immediately; widget stays hidden ────────
+        self.dashboard.show()
 
     # ------------------------------------------------------------------
     # Tray activation
@@ -448,7 +453,8 @@ class CoreXApp:
     def quit(self) -> None:
         self.poller.stop()
         self.poller.wait(2000)
-        self.tray.hide()
+        if hasattr(self, 'tray') and self.tray:
+            self.tray.hide()
         self.app.quit()
 
 
@@ -481,10 +487,7 @@ def main() -> None:
     app.setQuitOnLastWindowClosed(False)   # CRITICAL: keep alive when window closes
 
     # ── 4. Check system tray ──────────────────────────────────────────
-    if not QSystemTrayIcon.isSystemTrayAvailable():
-        QMessageBox.critical(None, "CoreX", "System tray not available.")
-        sys.exit(1)
-
+    # Optional tray initialization - fails silently if system tray is unavailable
     # ── 5. Start app ──────────────────────────────────────────────────
     corex_app = CoreXApp(app)
     sys.exit(app.exec())
