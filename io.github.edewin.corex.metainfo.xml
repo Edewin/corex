@@ -4,12 +4,15 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0</project_license>
   <name>CoreX</name>
-  <summary>Monitor hardware bazat pe Python</summary>
+  <developer id="io.github.edewin">
+    <name>Eduard Soltuzu</name>
+  </developer>
+  <summary>Python-based hardware monitor for Linux</summary>
 
   <description>
     <p>
-      CoreX este o aplicație ușoară pentru monitorizarea componentelor hardware pe sisteme Linux.
-      Oferă date în timp real despre procesor (CPU), placa video (GPU) și senzorii de sistem.
+      CoreX is a lightweight application for monitoring hardware components on Linux systems.
+      It provides real-time data about the processor (CPU), graphics card (GPU), and system sensors.
     </p>
   </description>
 
@@ -17,15 +20,15 @@
 
   <screenshots>
     <screenshot type="default">
-      <caption>Overview CoreX</caption>
+      <caption>CoreX Overview</caption>
       <image>https://raw.githubusercontent.com/Edewin/corex/main/corex/assets/screenshots/corex_desktop.png</image>
     </screenshot>
     <screenshot>
-      <caption>CoreX Hardware Tree</caption>
+      <caption>CoreX Hardware Tree View</caption>
       <image>https://raw.githubusercontent.com/Edewin/corex/main/corex/assets/screenshots/corex_dashboard_tree.png</image>
     </screenshot>
     <screenshot>
-      <caption>CoreX Widget</caption>
+      <caption>CoreX Desktop Widget</caption>
       <image>https://raw.githubusercontent.com/Edewin/corex/main/corex/assets/screenshots/corex_widget.png</image>
     </screenshot>
   </screenshots>
