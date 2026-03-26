@@ -1,0 +1,1 @@
+# CoreX sensors package

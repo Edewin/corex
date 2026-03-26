@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.edewin.corex</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0</project_license>
+  <name>CoreX</name>
+  <summary>Monitor hardware bazat pe Python</summary>
+
+  <description>
+    <p>
+      CoreX este o aplicație ușoară pentru monitorizarea componentelor hardware pe sisteme Linux.
+      Oferă date în timp real despre procesor (CPU), placa video (GPU) și senzorii de sistem.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">io.github.edewin.corex.desktop</launchable>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Interfața CoreX</caption>
+      <image>https://raw.githubusercontent.com/Edewin/corex/main/assets/screenshot.png</image>
+    </screenshot>
+  </screenshots>
+
+  <url type="homepage">https://github.com/Edewin/corex</url>
+  <url type="bugtracker">https://github.com/Edewin/corex/issues</url>
+
+  <provides>
+    <binary>corex-run</binary>
+  </provides>
+
+  <content_rating type="oars-1.1" />
+</component>
