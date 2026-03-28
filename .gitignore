@@ -15,4 +15,5 @@ build/
 *.log
 .DS_Store
 .pytest_cache/
-corex/assets/*.png
+corex/assets/*.png.flatpak-builder/
+build-dir/
