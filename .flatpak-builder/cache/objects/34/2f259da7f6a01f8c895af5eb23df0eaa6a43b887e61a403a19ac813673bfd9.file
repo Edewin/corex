@@ -1,3 +1,0 @@
-#!/bin/sh
-export PYTHONPATH=$PYTHONPATH:/app:/app/lib/python3.11/site-packages
-exec python3 /app/corex/main.py "$@"
