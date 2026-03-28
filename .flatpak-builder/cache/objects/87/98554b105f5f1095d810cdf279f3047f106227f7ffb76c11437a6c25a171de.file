@@ -1,0 +1,24 @@
+[Application]
+name=io.github.edewin.corex
+runtime=org.kde.Platform/x86_64/6.6
+sdk=org.kde.Sdk/x86_64/6.6
+command=corex-run
+
+[Context]
+shared=network;ipc;
+sockets=x11;wayland;
+devices=dri;all;
+filesystems=/sys:ro;xdg-config/kdeglobals:ro;/proc:ro;
+
+[Session Bus Policy]
+com.canonical.AppMenu.Registrar=talk
+org.kde.kconfig.notify=talk
+org.kde.KGlobalSettings=talk
+
+[Extension io.github.edewin.corex.Debug]
+directory=lib/debug
+autodelete=true
+no-autodownload=true
+
+[Build]
+built-extensions=io.github.edewin.corex.Debug;

@@ -1,0 +1,14 @@
+{
+    "name": "python3-numpy",
+    "buildsystem": "simple",
+    "build-commands": [
+        "pip3 install --verbose --exists-action=i --no-index --find-links=\"file://${PWD}\" --prefix=${FLATPAK_DEST} \"numpy\" --no-build-isolation"
+    ],
+    "sources": [
+        {
+            "type": "file",
+            "url": "https://files.pythonhosted.org/packages/10/8b/c265f4823726ab832de836cdd184d0986dcf94480f81e8739692a7ac7af2/numpy-2.4.3.tar.gz",
+            "sha256": "483a201202b73495f00dbc83796c6ae63137a9bdade074f7648b3e32613412dd"
+        }
+    ]
+}

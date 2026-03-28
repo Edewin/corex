@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=CoreX
 Comment=Hardware Monitor for Linux
-Exec=corex-run
+Exec=corex
 Icon=io.github.edewin.corex
 Terminal=false
 Type=Application
