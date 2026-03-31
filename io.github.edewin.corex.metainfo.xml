@@ -3,33 +3,33 @@
   <id>io.github.edewin.corex</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0</project_license>
-  <name>CoreX</name>
+  <name>CoreX - Hardware Monitor</name>
   <developer id="io.github.edewin">
     <name>Eduard Soltuzu</name>
   </developer>
-<summary>Hardware monitor for CPU, GPU and sensors with an always-on-top widget.</summary>
+  <summary>Real-time hardware monitoring with an always-on-top overlay widget</summary>
 
-<description>
-  <p>
-    CoreX is a hardware monitoring tool for Linux systems. 
-    It provides real-time data for the processor (CPU), graphics card (GPU), RAM and system sensors.
-  </p>
-  <p>
-    Features a customizable, always-on-top desktop widget that allows you to keep track 
-    of system performance without switching windows.
-  </p>
-</description>
+  <description>
+    <p>CoreX is a lightweight hardware monitor for Linux that keeps you informed about your system's health at all times.</p>
+    <ul>
+      <li>Monitors all sensors on your PC — CPU temperature, GPU temperature, fan speeds, voltages, and more</li>
+      <li>Displays real-time CPU and RAM usage with clear, readable graphs</li>
+      <li>Includes an always-on-top overlay widget — visible while gaming, working, or browsing, without switching windows</li>
+      <li>Minimal resource footprint — CoreX watches your system without slowing it down</li>
+      <li>Clean, native Linux interface built with PyQt6</li>
+    </ul>
+  </description>
 
-<keywords>
-  <keyword>hardware monitor</keyword>
-  <keyword>system monitor</keyword>
-  <keyword>sensor</keyword>
-  <keyword>sensors</keyword>
-  <keyword>cpu</keyword>
-  <keyword>gpu</keyword>
-  <keyword>widget</keyword>
-  <keyword>always-on-top</keyword>
-</keywords>
+  <keywords>
+    <keyword>hardware monitor</keyword>
+    <keyword>system monitor</keyword>
+    <keyword>sensor</keyword>
+    <keyword>sensors</keyword>
+    <keyword>cpu</keyword>
+    <keyword>gpu</keyword>
+    <keyword>widget</keyword>
+    <keyword>always-on-top</keyword>
+  </keywords>
 
   <launchable type="desktop-id">io.github.edewin.corex.desktop</launchable>
 
@@ -57,7 +57,9 @@
   </provides>
 
   <content_rating type="oars-1.1" />
+
   <releases>
-  <release version="1.0.0" date="2026-03-28"/>
+    <release version="1.0.0" date="2026-03-31"/>
   </releases>
+
 </component>
