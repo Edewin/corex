@@ -100,10 +100,6 @@ class SensorPoller(QThread):
         if self._tree is None:
             return
 
-        # Build lookup maps for efficient matching
-        Dict[str, HardwareComponent] = {
-            c.name: c for c in self._tree.components
-        }
 
         # ── CPU ───────────────────────────────────────────────────────
         new_usage_group = get_cpu_usage()
