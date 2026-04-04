@@ -243,8 +243,7 @@ def get_all_lm_components(
             timeout=5
         )
         
-        if result.returncode != 0:
-            print(f"Warning: 'sensors -j' command failed with return code {result.returncode}")
+        if result.returncode != 0 and not result.stdout.strip():
             return []
         
         # Parse the output
