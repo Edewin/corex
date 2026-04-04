@@ -11,7 +11,6 @@ import re
 import subprocess
 import time
 from typing import List, Optional
-from dataclasses import replace
 
 from ..models import Sensor, SensorGroup, HardwareComponent
 from .chip_registry import translate_label
@@ -391,7 +390,7 @@ power management:"""
     try:
         actual_name = get_cpu_name()
         print(f"   Actual CPU name from system: {actual_name}")
-    except:
+    except Exception:
         print("   Could not read actual /proc/cpuinfo, using mock test")
         # For unit test purposes, we would mock the file read
         # but we'll just verify the function doesn't crash

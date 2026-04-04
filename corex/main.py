@@ -101,7 +101,7 @@ class SensorPoller(QThread):
             return
 
         # Build lookup maps for efficient matching
-        components_by_name: Dict[str, HardwareComponent] = {
+        Dict[str, HardwareComponent] = {
             c.name: c for c in self._tree.components
         }
 
@@ -492,7 +492,7 @@ def main() -> None:
     # ── 4. Check system tray ──────────────────────────────────────────
     # Optional tray initialization - fails silently if system tray is unavailable
     # ── 5. Start app ──────────────────────────────────────────────────
-    corex_app = CoreXApp(app)
+    CoreXApp(app)
     sys.exit(app.exec())
 
 

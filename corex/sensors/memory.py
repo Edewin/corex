@@ -5,10 +5,8 @@ Reads memory data from /proc/meminfo.
 Returns data structured using models.py classes.
 """
 
-import os
 import re
 from typing import Dict, Optional
-from dataclasses import replace
 
 from ..models import Sensor, SensorGroup, HardwareComponent
 
@@ -141,7 +139,6 @@ def _create_swap_group(meminfo: Dict[str, int]) -> Optional[SensorGroup]:
     
     # 2. Free Swap
     swap_free_kb = meminfo.get("SwapFree", 0)
-    swap_free_mb = swap_free_kb / 1024.0
     
     # 3. Used Swap
     swap_used_kb = swap_total_kb - swap_free_kb

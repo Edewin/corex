@@ -7,8 +7,7 @@ Returns data structured using models.py classes.
 
 import os
 import sys
-from typing import List, Optional, Dict, Any
-from dataclasses import replace
+from typing import List, Optional
 
 from ..models import Sensor, SensorGroup, HardwareComponent
 
@@ -236,7 +235,7 @@ def _try_nvml_backend() -> List[HardwareComponent]:
                     # Add component to list
                     components.append(component)
                     
-                except (pynvml.NVMLError, AttributeError) as e:
+                except (pynvml.NVMLError, AttributeError):
                     # Skip this GPU if there's an error
                     continue
         
@@ -244,13 +243,14 @@ def _try_nvml_backend() -> List[HardwareComponent]:
             # Always try to shut down NVML
             try:
                 pynvml.nvmlShutdown()
-            except:
+            except Exception as e:
+                print(f"   Warning: NVML shutdown failed: {e}")
                 pass
     
     except ImportError:
         # pynvml not installed
         pass
-    except Exception as e:
+    except Exception:
         # Any other error
         pass
     
@@ -451,7 +451,7 @@ def _try_sysfs_backend() -> List[HardwareComponent]:
             
             # Also try this path as fallback (requires root)
             debugfs_path = f"/sys/kernel/debug/dri/{card_num}/amdgpu_pm_info"
-            debugfs_value = _read_sysfs_file(debugfs_path)
+            _read_sysfs_file(debugfs_path)
             # Note: We don't parse amdgpu_pm_info here as it's complex text format
             # Just checking if it's readable for future expansion
             
@@ -512,7 +512,7 @@ if __name__ == "__main__":
     try:
         gpus = get_gpu_components()
         print(f"   Success: returned {len(gpus)} GPU components")
-        print(f"   Type check: {type(gpus) == list} ✓")
+        print(f"   Type check: {isinstance(gpus, list)} ✓")
         
         if gpus:
             print(f"   First GPU: {gpus[0].icon} {gpus[0].name} ({gpus[0].component_type})")
@@ -532,7 +532,6 @@ if __name__ == "__main__":
     
     # Create a mock sysfs structure for testing
     import tempfile
-    import shutil
     
     try:
         # Create temporary directory structure
@@ -595,10 +594,10 @@ if __name__ == "__main__":
         # This should not raise an exception
         nvml_result = _try_nvml_backend()
         print(f"   NVML backend returned {len(nvml_result)} components (expected: 0)")
-        print(f"   ✓ NVML import failure handled gracefully")
+        print("   ✓ NVML import failure handled gracefully")
     except Exception as e:
         print(f"   Error: {e}")
-        print(f"   ✗ NVML import failure not handled properly")
+        print("   ✗ NVML import failure not handled properly")
     
     # Restore pynvml if it was originally present
     if original_pynvml:

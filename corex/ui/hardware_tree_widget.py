@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Dict
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QFontDatabase, QBrush, QClipboard
+from PyQt6.QtGui import QColor, QFont, QFontDatabase, QBrush
 from PyQt6.QtWidgets import (
     QApplication,
     QTreeWidget,
@@ -329,7 +329,6 @@ class HardwareTreeWidget(QTreeWidget):
         if data is None or data[0] != "component":
             return
 
-        comp_name = data[1]
         is_expanded = item.isExpanded()
 
         # Toggle

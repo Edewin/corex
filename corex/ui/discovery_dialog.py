@@ -8,7 +8,7 @@ Shown on first run when generic sensors (temp1, temp2, etc.) are detected.
 from __future__ import annotations
 
 from typing import Dict, List, Tuple, Optional
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QDialog,
@@ -22,7 +22,6 @@ from PyQt6.QtWidgets import (
     QTableWidgetItem,
     QHeaderView,
     QWidget,
-    QSizePolicy,
 )
 
 from corex.models import HardwareComponent

@@ -11,7 +11,6 @@ import time
 import shutil
 import subprocess
 from typing import List, Dict, Optional, Tuple
-from dataclasses import replace
 
 from ..models import Sensor, SensorGroup, HardwareComponent
 
@@ -625,7 +624,7 @@ if __name__ == "__main__":
     try:
         storage_components = get_storage_components()
         print(f"   Success: returned {len(storage_components)} storage components")
-        print(f"   Type check: {type(storage_components) == list} ✓")
+        print(f"   Type check: {isinstance(storage_components, list)} ✓")
         
         if storage_components:
             print(f"   First storage device: {storage_components[0].icon} {storage_components[0].name}")

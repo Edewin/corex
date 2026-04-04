@@ -7,8 +7,7 @@ structures it into HardwareComponent objects using models.py.
 
 import json
 import subprocess
-from typing import List, Dict, Any, Optional
-from dataclasses import replace
+from typing import List
 
 from ..models import Sensor, SensorGroup, HardwareComponent
 from .chip_registry import translate_label, get_chip_metadata
@@ -314,7 +313,7 @@ if __name__ == "__main__":
     coretemp_comps = [c for c in components if c.chip_name == "coretemp-isa-0000"]
     if coretemp_comps:
         coretemp = coretemp_comps[0]
-        print(f"\n   coretemp component found:")
+        print("\n   coretemp component found:")
         print(f"     Name: {coretemp.name}")
         print(f"     Type: {coretemp.component_type}")
         print(f"     Groups: {[g.name for g in coretemp.groups]}")

@@ -6,13 +6,11 @@ Returns data structured using models.py classes.
 """
 
 import os
-import re
 import time
 import socket
 import subprocess
 import shutil
 from typing import List, Dict, Optional, Tuple
-from dataclasses import replace
 
 from ..models import Sensor, SensorGroup, HardwareComponent
 
@@ -542,7 +540,7 @@ if __name__ == "__main__":
     try:
         network_components = get_network_components()
         print(f"   Success: returned {len(network_components)} network components")
-        print(f"   Type check: {type(network_components) == list} ✓")
+        print(f"   Type check: {isinstance(network_components, list)} ✓")
         
         if network_components:
             print(f"   First network interface: {network_components[0].icon} {network_components[0].name}")

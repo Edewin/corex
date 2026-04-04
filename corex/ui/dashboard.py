@@ -9,11 +9,10 @@ from __future__ import annotations
 import socket
 import time
 from collections import defaultdict, deque
-from typing import Dict, List, Optional
+from typing import Optional
 
 import pyqtgraph as pg
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QPalette
 from PyQt6.QtWidgets import (
     QApplication,
     QGridLayout,
@@ -27,7 +26,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from corex.models import HardwareTree, HardwareComponent, SensorGroup, Sensor
+from corex.models import HardwareTree
 from corex.ui.hardware_tree_widget import HardwareTreeWidget
 
 
@@ -150,36 +149,36 @@ class CoreXDashboard(QMainWindow):
         
     def _apply_dark_theme(self) -> None:
         """Apply dark theme to the window."""
-        self.setStyleSheet(f"""
-            QMainWindow {{
+        self.setStyleSheet("""
+            QMainWindow {
                 background-color: #1a1a2e;
                 color: #e0e0e0;
-            }}
-            QSplitter::handle {{
+            }
+            QSplitter::handle {
                 background-color: #2a2a4a;
                 width: 4px;
-            }}
-            QTabWidget::pane {{
+            }
+            QTabWidget::pane {
                 border: 1px solid #2a2a4a;
                 background-color: #1a1a2e;
-            }}
-            QTabBar::tab {{
+            }
+            QTabBar::tab {
                 background-color: #2a2a4a;
                 color: #e0e0e0;
                 padding: 8px 16px;
                 margin-right: 2px;
                 border: 1px solid #3a3a6a;
-            }}
-            QTabBar::tab:selected {{
+            }
+            QTabBar::tab:selected {
                 background-color: #3a3a6a;
                 border-bottom: 2px solid #1D9E75;
-            }}
-            QTabBar::tab:hover {{
+            }
+            QTabBar::tab:hover {
                 background-color: #3a3a6a;
-            }}
-            QLabel {{
+            }
+            QLabel {
                 color: #e0e0e0;
-            }}
+            }
         """)
         
     def _setup_ui(self) -> None:
