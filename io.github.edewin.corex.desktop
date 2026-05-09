@@ -6,3 +6,4 @@ Icon=io.github.edewin.corex
 Terminal=false
 Type=Application
 Categories=System;Monitor;Qt;
+Keywords=hardware monitor;system monitor;sensor;sensors;cpu;gpu;widget;always-on-top;

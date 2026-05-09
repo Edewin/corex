@@ -22,18 +22,7 @@
       <li>Clean, native Linux interface built with PyQt6</li>
     </ul>
   </description>
-
-  <keywords>
-    <keyword>hardware monitor</keyword>
-    <keyword>system monitor</keyword>
-    <keyword>sensor</keyword>
-    <keyword>sensors</keyword>
-    <keyword>cpu</keyword>
-    <keyword>gpu</keyword>
-    <keyword>widget</keyword>
-    <keyword>always-on-top</keyword>
-  </keywords>
-
+  
   <launchable type="desktop-id">io.github.edewin.corex.desktop</launchable>
 
   <screenshots>
