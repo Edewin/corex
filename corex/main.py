@@ -1,499 +1,184 @@
+"""CoreX entry point: wires settings, the engine thread, the main window, the widget and the tray."""
+
+from __future__ import annotations
+
+import argparse
 import os
 import sys
-os.environ['QT_QPA_PLATFORM'] = 'xcb'
-os.environ['QT_AUTO_SCREEN_SCALE_FACTOR'] = '1'
 
-import subprocess
-import time
-from typing import Dict, List, Optional, Any
-
-from PySide6.QtCore import QThread, Signal
-from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import (
-    QApplication,
-    QDialog,
-    QMessageBox,
-    QMenu,
-    QStyle,
-    QSystemTrayIcon,
-)
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 
 from corex import __version__
-from corex.models import HardwareTree, HardwareComponent
-from corex.sensors.cpu import build_cpu_component, get_cpu_usage, get_cpu_frequencies
-from corex.sensors.lm_reader import get_all_lm_components
-from corex.sensors.gpu import get_gpu_components
-from corex.sensors.memory import build_memory_component
-from corex.sensors.storage import get_storage_components
-from corex.sensors.network import get_network_components
-from corex.sensors.discovery import SensorDiscovery, needs_discovery
-from corex.ui.dashboard import CoreXDashboard
-from corex.ui.widget import CoreXWidget
-from corex.ui.discovery_dialog import DiscoveryDialog
+from corex.app.poller import History, Poller
+from corex.app.settings import Settings
+from corex.core.engine import Engine
+from corex.core.model import Snapshot
+from corex.ui import pick, theme
+from corex.ui.about import AboutDialog
+from corex.ui.dashboard import MainWindow
+from corex.ui.overlay import Overlay
 
+ICON_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "corex_icon.svg")
 
-# ============================================================================
-# SensorPoller — background thread that reads hardware data
-# ============================================================================
-
-class SensorPoller(QThread):
-    """Background thread that polls hardware sensors every second."""
-
-    data_ready       = Signal(object)   # HardwareTree
-    discovery_needed = Signal(object)   # List[HardwareComponent]
-    status_update    = Signal(bool, bool)  # lm_ok, nvml_ok
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._stop_flag = False
-        self._tree: Optional[HardwareTree] = None
-
-    # ------------------------------------------------------------------
-    # Thread entry point
-    # ------------------------------------------------------------------
-
-    def run(self) -> None:
-        # ── Step 1: Build initial HardwareTree ────────────────────────
-        cpu          = build_cpu_component()
-        lm_components = get_all_lm_components(cpu_component=cpu)
-        gpu_components = get_gpu_components()
-        mem          = build_memory_component()
-        storage      = get_storage_components()
-        nets         = get_network_components()
-
-        lm_ok   = len(lm_components) > 0
-        nvml_ok = any(g.chip_name == 'nvml' for g in gpu_components)
-
-        all_components = lm_components + gpu_components + [mem] + storage + nets
-
-        self._tree = HardwareTree(
-            components=all_components,
-            last_updated=time.time()
-        )
-
-        # ── Step 2: Apply saved sensor mappings ───────────────────────
-        sd = SensorDiscovery()
-        mappings = sd.load_saved_mappings()
-        if mappings:
-            sd.apply_mappings(self._tree.components, mappings)
-
-        # ── Step 3: Check if discovery needed ─────────────────────────
-        if needs_discovery(self._tree.components):
-            self.discovery_needed.emit(self._tree.components)
-
-        # ── Step 4: Emit initial data and status ──────────────────────
-        self.status_update.emit(lm_ok, nvml_ok)
-        self.data_ready.emit(self._tree)
-
-        # ── Step 5: Polling loop every 1 second ───────────────────────
-        while not self._stop_flag:
-            time.sleep(1)
-            self._update_tree()
-            self._tree.last_updated = time.time()
-            self.data_ready.emit(self._tree)
-
-    # ------------------------------------------------------------------
-    # In-place tree update
-    # ------------------------------------------------------------------
-
-    def _update_tree(self) -> None:
-        """Update all sensor values in-place without rebuilding the tree."""
-        if self._tree is None:
-            return
-
-
-        # ── CPU ───────────────────────────────────────────────────────
-        new_usage_group = get_cpu_usage()
-        new_freq_group  = get_cpu_frequencies()
-
-        for comp in self._tree.components:
-            if comp.chip_name == "cpu":
-                for group in comp.groups:
-                    if group.name == "Utilization":
-                        new_sensors_by_id = {
-                            s.sensor_id: s for s in new_usage_group.sensors
-                        }
-                        for sensor in group.sensors:
-                            if sensor.sensor_id in new_sensors_by_id:
-                                sensor.update(new_sensors_by_id[sensor.sensor_id].value)
-
-                    elif group.name == "Frequencies":
-                        new_sensors_by_id = {
-                            s.sensor_id: s for s in new_freq_group.sensors
-                        }
-                        for sensor in group.sensors:
-                            if sensor.sensor_id in new_sensors_by_id:
-                                sensor.update(new_sensors_by_id[sensor.sensor_id].value)
-                break
-
-        # ── GPU ───────────────────────────────────────────────────────
-        new_gpus = get_gpu_components()
-        new_gpus_by_name = {g.name: g for g in new_gpus}
-
-        for comp in self._tree.components:
-            if comp.chip_name in ("nvml",) or comp.chip_name.startswith("drm_card"):
-                new_gpu = new_gpus_by_name.get(comp.name)
-                if new_gpu is None:
-                    continue
-                new_sensors_by_id: Dict[str, Any] = {}
-                for grp in new_gpu.groups:
-                    for s in grp.sensors:
-                        new_sensors_by_id[s.sensor_id] = s
-                for group in comp.groups:
-                    for sensor in group.sensors:
-                        if sensor.sensor_id in new_sensors_by_id:
-                            sensor.update(new_sensors_by_id[sensor.sensor_id].value)
-
-        # ── Memory ────────────────────────────────────────────────────
-        new_mem = build_memory_component()
-        new_mem_sensors: Dict[str, Any] = {}
-        for grp in new_mem.groups:
-            for s in grp.sensors:
-                new_mem_sensors[s.sensor_id] = s
-
-        for comp in self._tree.components:
-            if comp.chip_name == "memory":
-                for group in comp.groups:
-                    for sensor in group.sensors:
-                        if sensor.sensor_id in new_mem_sensors:
-                            sensor.update(new_mem_sensors[sensor.sensor_id].value)
-                break
-
-        # ── Storage ───────────────────────────────────────────────────
-        new_storage = get_storage_components()
-        new_storage_sensors: Dict[str, Any] = {}
-        for st in new_storage:
-            for grp in st.groups:
-                for s in grp.sensors:
-                    new_storage_sensors[s.sensor_id] = s
-
-        for comp in self._tree.components:
-            if comp.component_type == "Storage":
-                for group in comp.groups:
-                    for sensor in group.sensors:
-                        if sensor.sensor_id in new_storage_sensors:
-                            sensor.update(new_storage_sensors[sensor.sensor_id].value)
-
-        # ── Network ───────────────────────────────────────────────────
-        new_nets = get_network_components()
-        new_net_sensors: Dict[str, Any] = {}
-        for net in new_nets:
-            for grp in net.groups:
-                for s in grp.sensors:
-                    new_net_sensors[s.sensor_id] = s
-
-        for comp in self._tree.components:
-            if comp.component_type == "Network":
-                for group in comp.groups:
-                    for sensor in group.sensors:
-                        if sensor.sensor_id in new_net_sensors:
-                            sensor.update(new_net_sensors[sensor.sensor_id].value)
-
-        # ── lm-sensors (temperatures, fans, voltages) ─────────────────
-        new_lm = get_all_lm_components()
-        new_lm_sensors: Dict[str, Any] = {}
-        for lm_comp in new_lm:
-            for grp in lm_comp.groups:
-                for s in grp.sensors:
-                    new_lm_sensors[s.sensor_id] = s
-
-        for comp in self._tree.components:
-            # lm-sensors components have chip_names like "coretemp-isa-0000",
-            # "nct6795-isa-0290", etc. — they are NOT "cpu", "memory", "nvml",
-            # "drm_card*", or a network/storage chip_name.
-            if comp.chip_name in ("cpu", "memory"):
-                continue
-            if comp.chip_name.startswith("drm_card"):
-                continue
-            if comp.chip_name == "nvml":
-                continue
-            if comp.component_type in ("Storage", "Network"):
-                continue
-
-            for group in comp.groups:
-                for sensor in group.sensors:
-                    if sensor.sensor_id in new_lm_sensors:
-                        sensor.update(new_lm_sensors[sensor.sensor_id].value)
-
-    # ------------------------------------------------------------------
-
-    def stop(self) -> None:
-        self._stop_flag = True
-
-
-# ============================================================================
-# CoreXApp — wires everything together
-# ============================================================================
 
 class CoreXApp:
-    """Application controller: tray icon, windows, poller."""
-
-    def __init__(self, app: QApplication) -> None:
+    def __init__(self, app: QApplication, start_hidden: bool = False):
         self.app = app
+        self.settings = Settings.load()
+        self.history = History()
+        self.engine = Engine(labels=self.settings.labels)
 
-        # ── 1. Dark palette ───────────────────────────────────────────
-        palette = QPalette()
-        palette.setColor(QPalette.ColorRole.Window,      QColor(26, 26, 46))
-        palette.setColor(QPalette.ColorRole.WindowText,  QColor(224, 224, 224))
-        palette.setColor(QPalette.ColorRole.Base,        QColor(13, 13, 26))
-        palette.setColor(QPalette.ColorRole.Text,        QColor(224, 224, 224))
-        palette.setColor(QPalette.ColorRole.Button,      QColor(42, 42, 74))
-        palette.setColor(QPalette.ColorRole.ButtonText,  QColor(224, 224, 224))
-        palette.setColor(QPalette.ColorRole.Highlight,   QColor(29, 158, 117))
-        app.setPalette(palette)
+        self.window = MainWindow(self.history, self.settings.interval_s, self.settings.last_page)
+        self.overlay = Overlay(self.settings.widget_opacity)
+        if self.settings.widget_readings is not None:
+            self.overlay.set_readings(self.settings.widget_readings)
+            self.window.widget_ids = set(self.settings.widget_readings)
+        if self.settings.widget_pos:
+            self.overlay.move(*self.settings.widget_pos)
+        self._setup_tray()
 
-        # ── 2. Load application icon ──────────────────────────────────
-        from PySide6.QtGui import QIcon
-        import os
+        w, o = self.window, self.overlay
+        w.interval_changed.connect(self._set_interval)
+        w.reset_minmax.connect(self.engine.reset_minmax)
+        w.toggle_widget.connect(self.toggle_widget)
+        w.renamed.connect(self._rename)
+        w.widget_toggled.connect(self._widget_toggled)
+        w.about_requested.connect(lambda: AboutDialog(w).exec())
+        w.quit_requested.connect(self.quit)
+        o.open_dashboard.connect(self.show_window)
+        o.choose_values.connect(self._choose_values)
+        o.hide_requested.connect(lambda: self.set_widget_visible(False))
+        o.quit_requested.connect(self.quit)
+        o.opacity_changed.connect(lambda v: self._save(widget_opacity=v))
+        o.moved.connect(lambda x, y: self._save(widget_pos=[x, y]))
 
-        icon_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            'assets', 'corex_icon.svg'
-        )
-
-        # ── 3. Create windows ─────────────────────────────────────────
-        self.dashboard = CoreXDashboard()
-        self.widget    = CoreXWidget()
-
-        # ── 4. Connect dashboard signal to widget ─────────────────────
-        self.dashboard.show_widget.connect(self.widget.show)
-
-        # ── 5. Tray icon ──────────────────────────────────────────────
-        # Optional tray initialization - wrapped in try/except to fail silently
-        try:
-            self.tray = QSystemTrayIcon()
-
-            if os.path.exists(icon_path):
-                app_icon = QIcon(icon_path)
-                app.setWindowIcon(app_icon)
-                self.tray.setIcon(app_icon)
-                self.dashboard.setWindowIcon(app_icon)
-                self.widget.setWindowIcon(app_icon)
-            else:
-                fallback = app.style().standardIcon(
-                    QStyle.StandardPixmap.SP_ComputerIcon
-                )
-                app.setWindowIcon(fallback)
-                self.tray.setIcon(fallback)
-                self.dashboard.setWindowIcon(fallback)
-                self.widget.setWindowIcon(fallback)
-
-            tray_menu = QMenu()
-            act_dashboard = tray_menu.addAction("🖥️ Show Dashboard")
-            act_widget    = tray_menu.addAction("📌 Show Widget")
-            tray_menu.addSeparator()
-            act_quit      = tray_menu.addAction("❌ Quit CoreX")
-
-            act_dashboard.triggered.connect(lambda: (
-                self.dashboard.show(),
-                self.dashboard.raise_()
-            ))
-            act_widget.triggered.connect(lambda: (
-                self.widget.show(),
-                self.widget.raise_()
-            ))
-            act_quit.triggered.connect(self.quit)
-
-            self.tray.setContextMenu(tray_menu)
-            self.tray.setToolTip("CoreX Hardware Monitor")
-            self.tray.show()
-
-            # Double-click tray → show dashboard
-            self.tray.activated.connect(self._on_tray_activated)
-        except Exception:
-            # Tray initialization failed - continue without tray functionality
-            self.tray = None
-
-        # ── 4. Connect widget signals ─────────────────────────────────
-        self.widget.open_dashboard.connect(
-            lambda: (self.dashboard.show(), self.dashboard.raise_())
-        )
-        self.widget.quit_app.connect(self.quit)
-
-        # ── 5. Create and start poller ────────────────────────────────
-        self.poller = SensorPoller()
-        self.poller.data_ready.connect(self._on_data)
-        self.poller.discovery_needed.connect(self._on_discovery_needed)
-        self.poller.status_update.connect(self.dashboard.set_sensor_status)
+        self.poller = Poller(self.engine, self.settings.interval_s)
+        self.poller.snapshot.connect(self._on_snapshot)
+        self.poller.failed.connect(lambda msg: print("CoreX: sensor read failed\n" + msg, file=sys.stderr))
         self.poller.start()
 
-        # ── 6. Show dashboard immediately; widget stays hidden ────────
-        self.dashboard.show()
+        if not start_hidden:
+            self.window.showMaximized()
+        self.set_widget_visible(self.settings.widget_visible)
 
     # ------------------------------------------------------------------
-    # Tray activation
-    # ------------------------------------------------------------------
+    def _setup_tray(self) -> None:
+        self.tray = None
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return
+        self.tray = QSystemTrayIcon(self.app.windowIcon())
+        self.tray.setToolTip(f"CoreX {__version__}")
+        menu = QMenu()
+        menu.addAction("Open CoreX", self.show_window)
+        self.tray_widget_action = menu.addAction("Show widget", self.toggle_widget)
+        menu.addSeparator()
+        menu.addAction("Quit CoreX", self.quit)
+        self.tray.setContextMenu(menu)
+        self.tray.activated.connect(
+            lambda reason: self.show_window() if reason == QSystemTrayIcon.ActivationReason.Trigger else None)
+        self.tray.show()
+        self.window.hide_on_close = True        # closing the window keeps CoreX in the tray
 
-    def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
-        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
-            self.dashboard.show()
-            self.dashboard.raise_()
+    def _on_snapshot(self, snap: Snapshot) -> None:
+        self.history.add(snap)
+        if self.settings.widget_readings is None:          # first run: sensible defaults
+            self.settings.widget_readings = pick.default_widget(snap)
+            self.overlay.set_readings(self.settings.widget_readings)
+            self.window.widget_ids = set(self.settings.widget_readings)
+            self.settings.save()
+        self.window.on_snapshot(snap)
+        if self.overlay.isVisible():
+            self.overlay.on_snapshot(snap)
 
-    # ------------------------------------------------------------------
-    # Data callbacks
-    # ------------------------------------------------------------------
+    def _save(self, **changes) -> None:
+        for k, v in changes.items():
+            setattr(self.settings, k, v)
+        self.settings.save()
 
-    def _on_data(self, tree: HardwareTree) -> None:
-        self.dashboard.update_dashboard(tree)
-        summary = self._build_widget_summary(tree)
-        self.widget.update_metrics(summary)
+    def _set_interval(self, seconds: float) -> None:
+        self.poller.set_interval(seconds)
+        self._save(interval_s=seconds)
 
-    def _build_widget_summary(self, tree: HardwareTree) -> Dict[str, Any]:
-        """Build the summary dict consumed by CoreXWidget.update_metrics()."""
-        summary: Dict[str, Any] = {}
+    def _rename(self, reading_id: str, label: str) -> None:
+        labels = dict(self.settings.labels)
+        if label:
+            labels[reading_id] = label
+        else:
+            labels.pop(reading_id, None)
+        self.engine.labels = labels
+        self._save(labels=labels)
 
-        for comp in tree.components:
-            # ── CPU ───────────────────────────────────────────────────
-            if comp.component_type == "CPU":
-                for group in comp.groups:
-                    if group.name == "Utilization":
-                        for sensor in group.sensors:
-                            if "Total" in sensor.label:
-                                summary["CPU %"] = {
-                                    "value":          sensor.value,
-                                    "unit":           "%",
-                                    "component_icon": "🔲",
-                                    "group_icon":     "📊",
-                                }
-                                break
-                    elif group.name == "Temperatures":
-                        # Prefer Package / CPU die; fall back to first sensor
-                        chosen = None
-                        for sensor in group.sensors:
-                            if "Package" in sensor.label or "CPU die" in sensor.label:
-                                chosen = sensor
-                                break
-                        if chosen is None and group.sensors:
-                            chosen = group.sensors[0]
-                        if chosen is not None:
-                            summary["CPU Temp"] = {
-                                "value":          chosen.value,
-                                "unit":           "°C",
-                                "component_icon": "🔲",
-                                "group_icon":     "🌡️",
-                            }
+    def _widget_toggled(self, reading_id: str, on: bool) -> None:
+        ids = list(self.settings.widget_readings or [])
+        if on and reading_id not in ids:
+            ids.append(reading_id)
+        elif not on and reading_id in ids:
+            ids.remove(reading_id)
+        self.window.widget_ids = set(ids)
+        self.overlay.set_readings(ids)
+        if self.history.latest:
+            self.overlay.on_snapshot(self.history.latest)
+        self._save(widget_readings=ids)
+        if on:
+            self.set_widget_visible(True)
 
-            # ── GPU ───────────────────────────────────────────────────
-            elif comp.component_type == "GPU":
-                for group in comp.groups:
-                    if group.name == "Utilization":
-                        for sensor in group.sensors:
-                            if "GPU" in sensor.label and sensor.unit == "%":
-                                summary["GPU %"] = {
-                                    "value":          sensor.value,
-                                    "unit":           "%",
-                                    "component_icon": "🎮",
-                                    "group_icon":     "📊",
-                                }
-                                break
-                    elif group.name == "Temperatures":
-                        for sensor in group.sensors:
-                            if "GPU Core" in sensor.label:
-                                summary["GPU Temp"] = {
-                                    "value":          sensor.value,
-                                    "unit":           "°C",
-                                    "component_icon": "🎮",
-                                    "group_icon":     "🌡️",
-                                }
-                                break
-
-            # ── Memory ────────────────────────────────────────────────
-            elif comp.chip_name == "memory":
-                for group in comp.groups:
-                    if group.name == "RAM":
-                        for sensor in group.sensors:
-                            if sensor.sensor_id == "mem_usage":
-                                summary["RAM %"] = {
-                                    "value":          sensor.value,
-                                    "unit":           "%",
-                                    "component_icon": "🧮",
-                                    "group_icon":     "🧮",
-                                }
-                                break
-
-            # ── Network (first active interface) ──────────────────────
-            elif comp.component_type == "Network" and "Download" not in summary:
-                for group in comp.groups:
-                    if group.name == "Traffic":
-                        for sensor in group.sensors:
-                            if "Download" in sensor.label:
-                                summary["Download"] = {
-                                    "value":          sensor.value,
-                                    "unit":           "MB/s",
-                                    "component_icon": "🌐",
-                                    "group_icon":     "🔄",
-                                }
-                            elif "Upload" in sensor.label:
-                                summary["Upload"] = {
-                                    "value":          sensor.value,
-                                    "unit":           "MB/s",
-                                    "component_icon": "🌐",
-                                    "group_icon":     "🔄",
-                                }
-
-        return summary
+    def _choose_values(self) -> None:
+        self.show_window()
+        self.window.statusBar().showMessage(
+            "Open a device on the left and tick the Widget column next to the values you want.", 8000)
 
     # ------------------------------------------------------------------
-    # Discovery
-    # ------------------------------------------------------------------
+    def show_window(self) -> None:
+        if self.window.isMinimized() or not self.window.isVisible():
+            self.window.showMaximized()
+        self.window.raise_()
+        self.window.activateWindow()
 
-    def _on_discovery_needed(self, components: List[HardwareComponent]) -> None:
-        dialog = DiscoveryDialog(components=components, parent=self.dashboard)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            mappings = SensorDiscovery().load_saved_mappings()
-            if mappings and self.poller._tree is not None:
-                SensorDiscovery().apply_mappings(
-                    self.poller._tree.components, mappings
-                )
+    def set_widget_visible(self, visible: bool) -> None:
+        self.overlay.setVisible(visible)
+        if visible and self.history.latest:
+            self.overlay.on_snapshot(self.history.latest)
+        self.window.widget_btn.setChecked(visible)
+        if self.tray:
+            self.tray_widget_action.setText("Hide widget" if visible else "Show widget")
+        if self.settings.widget_visible != visible:
+            self._save(widget_visible=visible)
 
-    # ------------------------------------------------------------------
-    # Quit
-    # ------------------------------------------------------------------
+    def toggle_widget(self) -> None:
+        self.set_widget_visible(not self.overlay.isVisible())
 
     def quit(self) -> None:
+        self._save(last_page=self.window.page)
         self.poller.stop()
-        self.poller.wait(2000)
-        if hasattr(self, 'tray') and self.tray:
+        if self.tray:
             self.tray.hide()
+        self.overlay.close()
         self.app.quit()
 
 
-# ============================================================================
-# main()
-# ============================================================================
-
 def main() -> None:
-    # ── 1. Check lm-sensors ───────────────────────────────────────────
-    result = subprocess.run(['which', 'sensors'], capture_output=True)
-    if result.returncode != 0:
-        # Need a minimal QApplication to show the warning box
-        _tmp_app = QApplication.instance() or QApplication(sys.argv)
-        QMessageBox.warning(
-            None,
-            "⚠️ lm-sensors not found",
-            "lm-sensors is required for temperature and fan monitoring.\n\n"
-            "Install with:\n"
-            "  sudo apt install lm-sensors\n"
-            "  sudo sensors-detect\n\n"
-            "CoreX will start with limited functionality."
-        )
+    parser = argparse.ArgumentParser(prog="corex", description="Hardware monitor for Linux")
+    parser.add_argument("--hidden", action="store_true", help="start with only the widget and tray icon")
+    parser.add_argument("--version", action="version", version=f"CoreX {__version__}")
+    args, qt_args = parser.parse_known_args()
 
-    # ── 3. Create QApplication ────────────────────────────────────────
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication(sys.argv)
+    app = QApplication([sys.argv[0]] + qt_args)
     app.setApplicationName("CoreX")
     app.setApplicationVersion(__version__)
-    app.setQuitOnLastWindowClosed(False)   # CRITICAL: keep alive when window closes
+    app.setDesktopFileName("io.github.edewin.corex")
+    app.setQuitOnLastWindowClosed(False)
+    app.setStyle("Fusion")
+    font = app.font()
+    font.setPointSize(10)
+    app.setFont(font)
+    app.setStyleSheet(theme.STYLESHEET)
+    if os.path.exists(ICON_PATH):
+        app.setWindowIcon(QIcon(ICON_PATH))
 
-    # ── 4. Check system tray ──────────────────────────────────────────
-    # Optional tray initialization - fails silently if system tray is unavailable
-    # ── 5. Start app ──────────────────────────────────────────────────
-    CoreXApp(app)
+    corex = CoreXApp(app, start_hidden=args.hidden)  # noqa: F841 (kept alive for the event loop)
     sys.exit(app.exec())
 
 
-# ============================================================================
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

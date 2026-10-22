@@ -1,755 +1,446 @@
-"""
-corex/ui/dashboard.py
-
-Main dashboard window for CoreX hardware monitoring.
-"""
+"""Main window: device sidebar, overview, per-device pages with tiles and a sensor table."""
 
 from __future__ import annotations
 
-import socket
 import time
-from collections import defaultdict, deque
-from typing import Optional
 
-from PySide6.QtCore import Qt, QTimer, Signal
-import pyqtgraph as pg
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QAction, QGuiApplication
 from PySide6.QtWidgets import (
-    QApplication,
+    QAbstractItemView,
+    QComboBox,
     QGridLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
-    QPushButton,
-    QSplitter,
-    QTabWidget,
+    QMenu,
+    QScrollArea,
+    QStackedWidget,
+    QToolButton,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
-from corex.models import HardwareTree
-from corex.ui.hardware_tree_widget import HardwareTreeWidget
+from corex import __version__
+from corex.app.poller import History
+from corex.app.settings import INTERVALS_S
+from corex.core.model import Device, Kind, Snapshot
+from corex.core.units import format_value
+from corex.ui import pick, theme
+from corex.ui.tiles import SidebarEntry, Tile
+
+OVERVIEW = "overview"
+_ID = Qt.ItemDataRole.UserRole
+
+
+def _tile_grid(tiles: list[Tile], columns: int) -> QGridLayout:
+    grid = QGridLayout()
+    grid.setContentsMargins(0, 0, 0, 0)
+    grid.setSpacing(12)
+    for i, t in enumerate(tiles):
+        grid.addWidget(t, i // columns, i % columns)
+    for c in range(columns):
+        grid.setColumnStretch(c, 1)
+    return grid
 
 
 # ---------------------------------------------------------------------------
-# Chart styling constants
-# ---------------------------------------------------------------------------
+class SensorTable(QTreeWidget):
+    renamed = Signal(str, str)           # reading id, new label ("" = back to default)
+    widget_toggled = Signal(str, bool)
 
-CHART_BACKGROUND = "#0d0d1a"
-CHART_GRID_COLOR = "#1a1a3a"
-CHART_AXIS_COLOR = "#333355"
-CHART_TEXT_COLOR = "#e0e0e0"
+    COLS = ("Sensor", "Value", "Min", "Max", "Widget")
 
-# Colors for different metrics
-COLOR_CPU_USAGE = "#1D9E75"
-COLOR_CPU_TEMP = "#FFA726"
-COLOR_GPU_USAGE = "#1D9E75"
-COLOR_GPU_TEMP = "#EF5350"
-COLOR_GPU_POWER = "#FFA726"
-COLOR_NET_DOWN = "#1D9E75"
-COLOR_NET_UP = "#FFA726"
-COLOR_RAM = "#4CAF50"
-COLOR_SWAP = "#FF9800"
-
-# Window dimensions
-WINDOW_WIDTH = 1280
-WINDOW_HEIGHT = 720
-LEFT_PANEL_WIDTH = 320
-
-# History length (60 seconds)
-HISTORY_LENGTH = 60
-
-
-# ---------------------------------------------------------------------------
-# Helper functions
-# ---------------------------------------------------------------------------
-
-def create_chart_widget(title: str) -> pg.PlotWidget:
-    """Create a styled pyqtgraph PlotWidget with consistent styling."""
-    widget = pg.PlotWidget()
-    
-    # Set background
-    widget.setBackground(CHART_BACKGROUND)
-    
-    # Configure axis
-    widget.showGrid(x=True, y=True, alpha=0.3)
-    widget.getAxis('left').setPen(CHART_AXIS_COLOR)
-    widget.getAxis('bottom').setPen(CHART_AXIS_COLOR)
-    widget.getAxis('left').setTextPen(CHART_TEXT_COLOR)
-    widget.getAxis('bottom').setTextPen(CHART_TEXT_COLOR)
-    
-    # Hide x-axis labels for rolling window
-    widget.getAxis('bottom').setTicks([])
-    
-    # Set label styles
-    label_style = {'color': CHART_TEXT_COLOR, 'font-size': '10pt'}
-    widget.setLabel('left', '', **label_style)
-    
-    # Disable mouse interaction for cleaner look
-    widget.setMouseEnabled(x=False, y=False)
-    widget.setMenuEnabled(False)
-    
-    return widget
-
-
-def get_color_for_value(value: float, unit: str = "%") -> str:
-    """Get color based on value and unit."""
-    if unit == "%":
-        if value < 60:
-            return "#4CAF50"  # Green
-        elif value <= 85:
-            return "#FFC107"  # Amber
-        else:
-            return "#F44336"  # Red
-    elif unit == "°C":
-        if value < 60:
-            return "#4CAF50"  # Green
-        elif value <= 80:
-            return "#FFC107"  # Amber
-        else:
-            return "#F44336"  # Red
-    else:
-        return "#1D9E75"  # Default green
-
-
-# ---------------------------------------------------------------------------
-# Main Dashboard Class
-# ---------------------------------------------------------------------------
-
-class CoreXDashboard(QMainWindow):
-    """Main dashboard window for CoreX hardware monitoring."""
-    
-    # Signals
-    show_widget = Signal()  # Emitted when "Show Widget" button is clicked
-    
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent=None):
         super().__init__(parent)
-        
-        # Get hostname for window title
-        hostname = socket.gethostname()
-        self.setWindowTitle(f"CoreX — {hostname}")
-        self.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
-        
-        # Apply dark theme
-        self._apply_dark_theme()
-        
-        # Initialize data storage
-        self._history = defaultdict(lambda: deque(maxlen=HISTORY_LENGTH))
-        
-        # Sensor status
-        self._lm_sensors_ok = False
-        self._nvml_ok = False
-        
-        # Build UI
-        self._setup_ui()
-        
-        # Setup update timer (for testing)
-        self._update_timer = QTimer()
-        self._update_timer.timeout.connect(self._on_timer_update)
-        self._update_timer.start(1000)  # Update every second
-        
-    def _apply_dark_theme(self) -> None:
-        """Apply dark theme to the window."""
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #1a1a2e;
-                color: #e0e0e0;
-            }
-            QSplitter::handle {
-                background-color: #2a2a4a;
-                width: 4px;
-            }
-            QTabWidget::pane {
-                border: 1px solid #2a2a4a;
-                background-color: #1a1a2e;
-            }
-            QTabBar::tab {
-                background-color: #2a2a4a;
-                color: #e0e0e0;
-                padding: 8px 16px;
-                margin-right: 2px;
-                border: 1px solid #3a3a6a;
-            }
-            QTabBar::tab:selected {
-                background-color: #3a3a6a;
-                border-bottom: 2px solid #1D9E75;
-            }
-            QTabBar::tab:hover {
-                background-color: #3a3a6a;
-            }
-            QLabel {
-                color: #e0e0e0;
-            }
-        """)
-        
-    def _setup_ui(self) -> None:
-        """Setup the main UI layout."""
-        # Create central widget with vertical layout
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        
-        main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
-        
-        # Create toolbar row at the top
-        toolbar_widget = QWidget()
-        toolbar_layout = QHBoxLayout(toolbar_widget)
-        toolbar_layout.setContentsMargins(8, 8, 8, 8)
-        toolbar_layout.setSpacing(8)
-        
-        # Add spacer to push button to the right
-        toolbar_layout.addStretch(1)
-        
-        # Create "Show Widget" button
-        self.show_widget_button = QPushButton("📌 Show Widget")
-        self.show_widget_button.setStyleSheet("""
-            QPushButton {
-                background-color: #2a2a4a;
-                color: #e0e0e0;
-                border: 1px solid #3a3a6a;
-                border-radius: 4px;
-                padding: 6px 12px;
-                font-size: 12px;
-            }
-            QPushButton:hover {
-                background-color: #3a3a6a;
-                border-color: #1D9E75;
-            }
-            QPushButton:pressed {
-                background-color: #1D9E75;
-            }
-        """)
-        self.show_widget_button.clicked.connect(self.show_widget.emit)
-        toolbar_layout.addWidget(self.show_widget_button)
-        
-        main_layout.addWidget(toolbar_widget)
-        
-        # Create splitter for the main content area
-        content_widget = QWidget()
-        content_layout = QHBoxLayout(content_widget)
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(0)
-        
-        self.splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.splitter.setHandleWidth(6)
-        self.splitter.setChildrenCollapsible(False)
-        self.splitter.setStyleSheet("""
-            QSplitter::handle {
-                background-color: #2a2a4a;
-                border: 1px solid #3a3a6a;
-            }
-            QSplitter::handle:hover {
-                background-color: #1D9E75;
-            }
-        """)
-        content_layout.addWidget(self.splitter)
+        self.setColumnCount(len(self.COLS))
+        self.setHeaderLabels(self.COLS)
+        self.setAlternatingRowColors(True)
+        self.setUniformRowHeights(True)
+        self.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.EditKeyPressed)
+        h = self.header()
+        h.setStretchLastSection(False)
+        h.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for c in (1, 2, 3):
+            h.setSectionResizeMode(c, QHeaderView.ResizeMode.Fixed)
+            self.setColumnWidth(c, 130)
+        h.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        self.setColumnWidth(4, 70)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._menu)
+        self.itemChanged.connect(self._changed)
+        self._items: dict[str, QTreeWidgetItem] = {}
+        self.signature: tuple = ()
+        self._updating = False
+        self._mono = theme.mono_font(10)
 
-        # Left panel - Hardware tree
-        left_panel = QWidget()
-        left_panel.setMinimumWidth(200)
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(8, 8, 8, 8)
-        
-        self.tree_label = QLabel("Loading sensors...")
-        self.tree_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #1D9E75;")
-        left_layout.addWidget(self.tree_label)
-        
-        self.tree_widget = HardwareTreeWidget()
-        left_layout.addWidget(self.tree_widget)
-        
-        self.splitter.addWidget(left_panel)
-        
-        # Right panel - Tabs
-        right_panel = QWidget()
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        
-        self.tabs = QTabWidget()
-        right_layout.addWidget(self.tabs)
-        
-        # Create tabs
-        self._create_overview_tab()
-        self._create_cpu_tab()
-        self._create_memory_tab()
-        self._create_gpu_tab()
-        self._create_network_tab()
-        
-        self.splitter.addWidget(right_panel)
-        
-        # Set splitter sizes
-        self.splitter.setSizes([320, 960])
-        
-        main_layout.addWidget(content_widget, 1)  # 1 = stretch factor
-        
-        # Create status bar
-        self._setup_status_bar()
-        
-    def _setup_status_bar(self) -> None:
-        """Setup the status bar with sensor status."""
-        status_bar = self.statusBar()
-        
-        # Left: timestamp
-        self.status_time = QLabel("🕐 --:--:--")
-        status_bar.addWidget(self.status_time, 1)
-        
-        # Center: sensor count
-        self.status_sensors = QLabel("📡 0 sensors active")
-        status_bar.addPermanentWidget(self.status_sensors)
-        
-        # Right: sensor status
-        self.status_sensor_status = QLabel("lm-sensors ❌   NVML ❌")
-        status_bar.addPermanentWidget(self.status_sensor_status)
-        
-        # Update timer for timestamp
-        self._time_timer = QTimer()
-        self._time_timer.timeout.connect(self._update_timestamp)
-        self._time_timer.start(1000)
-        self._update_timestamp()
-        
-    def _update_timestamp(self) -> None:
-        """Update the timestamp in status bar."""
-        current_time = time.strftime("%H:%M:%S")
-        self.status_time.setText(f"🕐 {current_time}")
-        
-    def _create_overview_tab(self) -> None:
-        """Create the Overview tab with 2x2 grid of charts."""
-        tab = QWidget()
-        layout = QGridLayout(tab)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
-        
-        # CPU Usage %
-        cpu_usage_widget = create_chart_widget("CPU Usage %")
-        cpu_usage_widget.setTitle("🔲 CPU Usage %", color=CHART_TEXT_COLOR, size="12pt")
-        self.cpu_usage_plot = cpu_usage_widget.plot(pen=COLOR_CPU_USAGE, width=2)
-        layout.addWidget(cpu_usage_widget, 0, 0)
-        
-        # CPU Temperature
-        cpu_temp_widget = create_chart_widget("CPU Temperature")
-        cpu_temp_widget.setTitle("🌡️ CPU Temperature", color=CHART_TEXT_COLOR, size="12pt")
-        self.cpu_temp_plot = cpu_temp_widget.plot(pen=COLOR_CPU_TEMP, width=2)
-        layout.addWidget(cpu_temp_widget, 0, 1)
-        
-        # GPU Usage %
-        gpu_usage_widget = create_chart_widget("GPU Usage %")
-        gpu_usage_widget.setTitle("🎮 GPU Usage %", color=CHART_TEXT_COLOR, size="12pt")
-        self.gpu_usage_plot = gpu_usage_widget.plot(pen=COLOR_GPU_USAGE, width=2)
-        layout.addWidget(gpu_usage_widget, 1, 0)
-        
-        # GPU Temperature
-        gpu_temp_widget = create_chart_widget("GPU Temperature")
-        gpu_temp_widget.setTitle("🌡️ GPU Temperature", color=CHART_TEXT_COLOR, size="12pt")
-        self.gpu_temp_plot = gpu_temp_widget.plot(pen=COLOR_GPU_TEMP, width=2)
-        layout.addWidget(gpu_temp_widget, 1, 1)
-        
-        self.tabs.addTab(tab, "📊 Overview")
-        
-    def _create_cpu_tab(self) -> None:
-        """Create the CPU tab with core utilization bars and frequency charts."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
-        
-        # Top: Core utilization bars
-        util_label = QLabel("Core Utilization %")
-        util_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #1D9E75;")
-        layout.addWidget(util_label)
-        
-        self.cpu_util_graph = pg.GraphicsLayoutWidget()
-        self.cpu_util_graph.setBackground(CHART_BACKGROUND)
-        self.cpu_util_plot = self.cpu_util_graph.addPlot()
-        self.cpu_util_plot.hideAxis('bottom')
-        self.cpu_util_plot.hideAxis('left')
-        self.cpu_util_plot.setMouseEnabled(x=False, y=False)
-        self.cpu_util_bars = pg.BarGraphItem(x=[], height=[], width=0.8, brush="#1D9E75")
-        self.cpu_util_plot.addItem(self.cpu_util_bars)
-        layout.addWidget(self.cpu_util_graph, 1)
-        
-        # Bottom: Core frequency lines
-        freq_label = QLabel("Core Frequency (GHz)")
-        freq_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #FFA726;")
-        layout.addWidget(freq_label)
-        
-        freq_widget = create_chart_widget("Core Frequencies")
-        self.cpu_freq_plots = []  # Will store one plot line per core
-        layout.addWidget(freq_widget, 1)
-        self.cpu_freq_widget = freq_widget
-        
-        self.tabs.addTab(tab, "🔲 CPU")
-        
-    def _create_memory_tab(self) -> None:
-        """Create the Memory tab with RAM and Swap usage charts."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
-        
-        # RAM Usage
-        ram_label = QLabel("RAM Usage %")
-        ram_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #4CAF50;")
-        layout.addWidget(ram_label)
-        
-        ram_widget = create_chart_widget("RAM Usage")
-        self.ram_plot = ram_widget.plot(pen=COLOR_RAM, width=2, fillLevel=0, 
-                                        brush=(COLOR_RAM + "40"))
-        layout.addWidget(ram_widget, 1)
-        
-        # Swap Usage
-        swap_label = QLabel("Swap Usage %")
-        swap_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #FF9800;")
-        layout.addWidget(swap_label)
-        
-        swap_widget = create_chart_widget("Swap Usage")
-        self.swap_plot = swap_widget.plot(pen=COLOR_SWAP, width=2, fillLevel=0,
-                                          brush=(COLOR_SWAP + "40"))
-        layout.addWidget(swap_widget, 1)
-        
-        self.tabs.addTab(tab, "🧮 Memory")
-        
-    def _create_gpu_tab(self) -> None:
-        """Create the GPU tab with utilization, temperature, and power charts."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
-        
-        # GPU Utilization
-        util_label = QLabel("GPU Utilization %")
-        util_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #1D9E75;")
-        layout.addWidget(util_label)
-        
-        util_widget = create_chart_widget("GPU Utilization")
-        self.gpu_util_detail_plot = util_widget.plot(pen=COLOR_GPU_USAGE, width=2)
-        layout.addWidget(util_widget, 1)
-        
-        # GPU Temperature
-        temp_label = QLabel("GPU Temperature °C")
-        temp_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #EF5350;")
-        layout.addWidget(temp_label)
-        
-        temp_widget = create_chart_widget("GPU Temperature")
-        self.gpu_temp_detail_plot = temp_widget.plot(pen=COLOR_GPU_TEMP, width=2)
-        layout.addWidget(temp_widget, 1)
-        
-        # GPU Power
-        power_label = QLabel("GPU Power (W)")
-        power_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #FFA726;")
-        layout.addWidget(power_label)
-        
-        power_widget = create_chart_widget("GPU Power")
-        self.gpu_power_plot = power_widget.plot(pen=COLOR_GPU_POWER, width=2)
-        layout.addWidget(power_widget, 1)
-        
-        self.tabs.addTab(tab, "🎮 GPU")
-        
-    def _create_network_tab(self) -> None:
-        """Create the Network tab with download and upload charts."""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
-        
-        # Download
-        down_label = QLabel("Download (MB/s)")
-        down_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #1D9E75;")
-        layout.addWidget(down_label)
-        
-        down_widget = create_chart_widget("Download")
-        self.net_down_plot = down_widget.plot(pen=COLOR_NET_DOWN, width=2, fillLevel=0,
-                                              brush=(COLOR_NET_DOWN + "40"))
-        layout.addWidget(down_widget, 1)
-        
-        # Upload
-        up_label = QLabel("Upload (MB/s)")
-        up_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #FFA726;")
-        layout.addWidget(up_label)
-        
-        up_widget = create_chart_widget("Upload")
-        self.net_up_plot = up_widget.plot(pen=COLOR_NET_UP, width=2, fillLevel=0,
-                                          brush=(COLOR_NET_UP + "40"))
-        layout.addWidget(up_widget, 1)
-        
-        self.tabs.addTab(tab, "🌐 Network")
-        
-    # -----------------------------------------------------------------------
-    # Public API
-    # -----------------------------------------------------------------------
-    
-    def update_dashboard(self, tree: HardwareTree) -> None:
-        """
-        Update the dashboard with new hardware tree data.
-        
-        Parameters
-        ----------
-        tree : HardwareTree
-            The hardware tree containing all sensor data.
-        """
-        # Update the tree widget
-        if not self.tree_widget._items:  # First time
-            self.tree_widget.build_tree(tree)
+    def show_device(self, device: Device, widget_ids: set[str]) -> None:
+        signature = tuple((g.name, tuple(r.id for r in g.readings)) for g in device.groups)
+        if signature != self.signature:
+            self._build(device)
+            self.signature = signature
+        editing = self.state() == QAbstractItemView.State.EditingState
+        self._updating = True
+        for g in device.groups:
+            for r in g.readings:
+                item = self._items[r.id]
+                if not editing and item.text(0) != r.label:
+                    item.setText(0, r.label)
+                item.setText(1, format_value(r.kind, r.value, r.text))
+                item.setForeground(1, theme.qcolor(theme.level_color(r.kind, r.value)))
+                if r.kind != Kind.INFO:
+                    item.setText(2, format_value(r.kind, r.min))
+                    item.setText(3, format_value(r.kind, r.max))
+                    item.setCheckState(4, Qt.CheckState.Checked if r.id in widget_ids else Qt.CheckState.Unchecked)
+        self._updating = False
+
+    def _build(self, device: Device) -> None:
+        self._updating = True
+        self.clear()
+        self._items.clear()
+        for g in device.groups:
+            parent = QTreeWidgetItem(self, [g.name])
+            parent.setFirstColumnSpanned(True)
+            parent.setForeground(0, theme.qcolor(theme.MUTED))
+            f = parent.font(0)
+            f.setBold(True)
+            parent.setFont(0, f)
+            parent.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            for r in g.readings:
+                item = QTreeWidgetItem(parent, [r.label])
+                item.setData(0, _ID, r.id)
+                item.setToolTip(0, "Double-click to rename")
+                flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable
+                if r.kind != Kind.INFO:
+                    flags |= Qt.ItemFlag.ItemIsUserCheckable
+                    item.setCheckState(4, Qt.CheckState.Unchecked)
+                    item.setToolTip(4, "Show this value in the floating widget")
+                item.setFlags(flags)
+                for c in (1, 2, 3):
+                    item.setFont(c, self._mono)
+                    item.setTextAlignment(c, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                self._items[r.id] = item
+            parent.setExpanded(True)
+        self._updating = False
+
+    def _changed(self, item: QTreeWidgetItem, column: int) -> None:
+        if self._updating:
+            return
+        rid = item.data(0, _ID)
+        if not rid:
+            return
+        if column == 0:
+            self.renamed.emit(rid, item.text(0).strip())
+        elif column == 4:
+            self.widget_toggled.emit(rid, item.checkState(4) == Qt.CheckState.Checked)
+
+    def _menu(self, pos) -> None:
+        item = self.itemAt(pos)
+        rid = item.data(0, _ID) if item else None
+        if not rid:
+            return
+        menu = QMenu(self)
+        menu.addAction("Rename…", lambda: self.editItem(item, 0))
+        menu.addAction("Restore original name", lambda: self.renamed.emit(rid, ""))
+        menu.addSeparator()
+        menu.addAction("Copy value", lambda: QGuiApplication.clipboard().setText(item.text(1)))
+        menu.addAction("Copy name and value",
+                       lambda: QGuiApplication.clipboard().setText(f"{item.text(0)}: {item.text(1)}"))
+        if item.flags() & Qt.ItemFlag.ItemIsUserCheckable:
+            on = item.checkState(4) == Qt.CheckState.Checked
+            menu.addSeparator()
+            menu.addAction("Remove from widget" if on else "Show in widget",
+                           lambda: item.setCheckState(4, Qt.CheckState.Unchecked if on else Qt.CheckState.Checked))
+        menu.exec(self.viewport().mapToGlobal(pos))
+
+
+# ---------------------------------------------------------------------------
+class DevicePage(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.device_id: str | None = None
+        self.tile_ids: list = []
+        self.tiles: list[Tile] = []
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(24, 18, 24, 18)
+        lay.setSpacing(14)
+        head = QHBoxLayout()
+        head.setSpacing(12)
+        self.icon = QLabel()
+        head.addWidget(self.icon)
+        col = QVBoxLayout()
+        col.setSpacing(0)
+        self.name = QLabel()
+        self.name.setObjectName("h1")
+        self.detail = QLabel()
+        self.detail.setObjectName("muted")
+        col.addWidget(self.name)
+        col.addWidget(self.detail)
+        head.addLayout(col, 1)
+        lay.addLayout(head)
+        self.tiles_host = QWidget()
+        self.tiles_host.setLayout(QGridLayout())
+        lay.addWidget(self.tiles_host)
+        self.table = SensorTable()
+        lay.addWidget(self.table, 1)
+
+    def show_device(self, device_id: str) -> None:
+        self.device_id = device_id
+        self.tile_ids = []
+        self.table.signature = ()
+
+    def refresh(self, snap: Snapshot, history: History, widget_ids: set[str]) -> None:
+        dev = snap.device(self.device_id) if self.device_id else None
+        if dev is None:
+            return
+        self.icon.setPixmap(theme.icon_pixmap(dev.kind, theme.ACCENT, 34))
+        self.name.setText(dev.name)
+        self.detail.setText(dev.detail)
+        wanted = pick.tiles(dev)
+        if wanted != self.tile_ids:
+            self.tile_ids = wanted
+            QWidget().setLayout(self.tiles_host.layout())      # re-parent the old layout so it is deleted
+            self.tiles = [Tile(dev.id, ids) for ids in wanted]
+            self.tiles_host.setLayout(_tile_grid(self.tiles, max(1, len(self.tiles))))
+            self.tiles_host.setVisible(bool(self.tiles))
+        for t in self.tiles:
+            t.refresh(snap, history)
+        self.table.show_device(dev, widget_ids)
+
+
+class OverviewPage(QScrollArea):
+    open_device = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWidgetResizable(True)
+        self._ids: list = []
+        self._columns = 0
+        self.tiles: list[Tile] = []
+        self.setWidget(QWidget())
+
+    def refresh(self, snap: Snapshot, history: History) -> None:
+        wanted = pick.overview_tiles(snap)
+        columns = max(1, min(4, self.viewport().width() // 320))
+        if wanted != self._ids or columns != self._columns:
+            self._ids, self._columns = wanted, columns
+            host = QWidget()
+            outer = QVBoxLayout(host)
+            outer.setContentsMargins(24, 18, 24, 18)
+            self.tiles = [Tile(dev_id, ids, show_device=True) for dev_id, ids in wanted]
+            for t in self.tiles:
+                t.clicked.connect(self.open_device)
+            outer.addLayout(_tile_grid(self.tiles, columns))
+            outer.addStretch(1)
+            self.setWidget(host)
+        for t in self.tiles:
+            t.refresh(snap, history)
+
+
+# ---------------------------------------------------------------------------
+class MainWindow(QMainWindow):
+    interval_changed = Signal(float)
+    reset_minmax = Signal()
+    toggle_widget = Signal()
+    renamed = Signal(str, str)
+    widget_toggled = Signal(str, bool)
+    about_requested = Signal()
+    quit_requested = Signal()
+
+    def __init__(self, history: History, interval_s: float, start_page: str = OVERVIEW):
+        super().__init__()
+        self.history = history
+        self.widget_ids: set[str] = set()
+        self.hide_on_close = False
+        self._page = start_page
+        self._sidebar_ids: list[str] | None = None
+        self._entries: dict[str, SidebarEntry] = {}
+        self.setWindowTitle(f"CoreX {__version__}")
+        self.resize(1280, 820)
+
+        root = QWidget()
+        h = QHBoxLayout(root)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(0)
+
+        side = QWidget()
+        side.setFixedWidth(280)
+        side.setStyleSheet(f"background: {theme.PANEL};")
+        sv = QVBoxLayout(side)
+        sv.setContentsMargins(0, 16, 0, 8)
+        brand = QLabel(f"<span style='color:{theme.ACCENT}; font-size:17pt; font-weight:700'>Core</span>"
+                       f"<span style='font-size:17pt; font-weight:700'>X</span>"
+                       f"<span style='color:{theme.MUTED}; font-size:9pt'>&nbsp;&nbsp;{__version__}</span>")
+        brand.setContentsMargins(20, 0, 0, 12)
+        sv.addWidget(brand)
+        self.sidebar = QListWidget()
+        self.sidebar.setObjectName("sidebar")
+        self.sidebar.currentItemChanged.connect(self._on_select)
+        sv.addWidget(self.sidebar, 1)
+        h.addWidget(side)
+
+        main = QWidget()
+        mv = QVBoxLayout(main)
+        mv.setContentsMargins(0, 0, 0, 0)
+        mv.setSpacing(0)
+        mv.addWidget(self._toolbar(interval_s))
+        self.stack = QStackedWidget()
+        self.overview = OverviewPage()
+        self.overview.open_device.connect(self.select)
+        self.device_page = DevicePage()
+        self.device_page.table.renamed.connect(self.renamed)
+        self.device_page.table.widget_toggled.connect(self.widget_toggled)
+        self.stack.addWidget(self.overview)
+        self.stack.addWidget(self.device_page)
+        mv.addWidget(self.stack, 1)
+        h.addWidget(main, 1)
+        self.setCentralWidget(root)
+
+        sb = self.statusBar()
+        self.status_sensors = QLabel()
+        self.status_hint = QLabel()
+        self.status_hint.setStyleSheet("color: #ffb547;")
+        self.status_time = QLabel()
+        sb.addWidget(self.status_sensors)
+        sb.addWidget(self.status_hint, 1)
+        sb.addPermanentWidget(self.status_time)
+
+    def _toolbar(self, interval_s: float) -> QWidget:
+        bar = QWidget()
+        bar.setObjectName("toolbar")
+        bar.setStyleSheet(f"QWidget#toolbar {{ border-bottom: 1px solid {theme.BORDER}; }}")
+        lay = QHBoxLayout(bar)
+        lay.setContentsMargins(24, 10, 16, 10)
+        self.page_title = QLabel("Overview")
+        self.page_title.setObjectName("h2")
+        lay.addWidget(self.page_title)
+        lay.addStretch(1)
+
+        self.interval = QComboBox()
+        self.interval.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        for s in INTERVALS_S:
+            self.interval.addItem(f"Update every {s:g} s", s)
+        self.interval.setCurrentIndex(INTERVALS_S.index(interval_s) if interval_s in INTERVALS_S else 1)
+        self.interval.currentIndexChanged.connect(lambda i: self.interval_changed.emit(self.interval.itemData(i)))
+        lay.addWidget(self.interval)
+
+        reset = QToolButton()
+        reset.setText("Reset min/max")
+        reset.setIcon(theme.icon("reset", theme.TEXT, 16))
+        reset.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        reset.setToolTip("Start the min/max columns over from the current values")
+        reset.clicked.connect(self.reset_minmax)
+        lay.addWidget(reset)
+
+        self.widget_btn = QToolButton()
+        self.widget_btn.setText("Widget")
+        self.widget_btn.setIcon(theme.icon("widget", theme.TEXT, 16))
+        self.widget_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.widget_btn.setCheckable(True)
+        self.widget_btn.setToolTip("Show or hide the floating widget (Ctrl+W)")
+        self.widget_btn.clicked.connect(self.toggle_widget)
+        lay.addWidget(self.widget_btn)
+
+        menu_btn = QToolButton()
+        menu_btn.setIcon(theme.icon("menu", theme.TEXT, 16))
+        menu_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        menu_btn.setStyleSheet("QToolButton::menu-indicator { image: none; }")
+        menu = QMenu(menu_btn)
+        menu.addAction("About CoreX", self.about_requested)
+        menu.addSeparator()
+        quit_action = QAction("Quit CoreX", self)
+        quit_action.setShortcut("Ctrl+Q")
+        quit_action.triggered.connect(self.quit_requested)
+        menu.addAction(quit_action)
+        self.addAction(quit_action)
+        menu_btn.setMenu(menu)
+        lay.addWidget(menu_btn)
+
+        toggle = QAction(self)
+        toggle.setShortcut("Ctrl+W")
+        toggle.triggered.connect(self.toggle_widget)
+        self.addAction(toggle)
+        return bar
+
+    # ------------------------------------------------------------------
+    def select(self, page: str) -> None:
+        for i in range(self.sidebar.count()):
+            if self.sidebar.item(i).data(_ID) == page:
+                self.sidebar.setCurrentRow(i)
+                return
+
+    @property
+    def page(self) -> str:
+        return self._page
+
+    def _on_select(self, current: QListWidgetItem | None, _prev=None) -> None:
+        if current is None:
+            return
+        self._page = current.data(_ID)
+        if self._page == OVERVIEW:
+            self.stack.setCurrentWidget(self.overview)
+            self.page_title.setText("Overview")
         else:
-            self.tree_widget.update_tree(tree)
-            
-        # Extract values into history
-        self._extract_history(tree)
-        
-        # Update sensor count in status bar
-        sensor_count = len(tree.all_sensors())
-        self.status_sensors.setText(f"📡 {sensor_count} sensors active")
-        
-        # Update only the visible tab's charts
-        self._update_visible_charts()
-        
-    def _extract_history(self, tree: HardwareTree) -> None:
-        """
-        Extract values from hardware tree and store in history.
-        
-        Parameters
-        ----------
-        tree : HardwareTree
-            The hardware tree containing all sensor data.
-        """
-        # Reset per-core data tracking
-        core_count = 0
-        freq_count = 0
-        
-        for component in tree.components:
-            if component.component_type == "CPU":
-                # Find CPU total utilization and temperature
-                for group in component.groups:
-                    if group.name == "Utilization":
-                        for sensor in group.sensors:
-                            if "Total" in sensor.label:
-                                self._history["cpu_total"].append(sensor.value)
-                            elif "Core" in sensor.label:
-                                # Extract core number
-                                try:
-                                    core_num = int(sensor.label.split()[1])
-                                    key = f"cpu_core_{core_num}"
-                                    self._history[key].append(sensor.value)
-                                    core_count = max(core_count, core_num + 1)
-                                except (ValueError, IndexError):
-                                    pass
-                    elif group.name == "Temperatures":
-                        for sensor in group.sensors:
-                            if "Package" in sensor.label or "CPU die" in sensor.label:
-                                self._history["cpu_temp"].append(sensor.value)
-                                break
-                        else:
-                            if group.sensors:
-                                self._history["cpu_temp"].append(group.sensors[0].value)
-                    elif group.name == "Frequencies":
-                        for sensor in group.sensors:
-                            if "Core" in sensor.label:
-                                try:
-                                    core_num = int(sensor.label.split()[1])
-                                    key = f"cpu_freq_{core_num}"
-                                    self._history[key].append(sensor.value)
-                                    freq_count = max(freq_count, core_num + 1)
-                                except (ValueError, IndexError):
-                                    pass
-                                    
-            elif component.component_type == "GPU":
-                # Find GPU utilization, temperature, and power
-                for group in component.groups:
-                    if group.name == "Utilization":
-                        for sensor in group.sensors:
-                            if "GPU" in sensor.label and sensor.unit == "%":
-                                self._history["gpu_util"].append(sensor.value)
-                    elif group.name == "Temperatures":
-                        for sensor in group.sensors:
-                            if "GPU Core" in sensor.label:
-                                self._history["gpu_temp"].append(sensor.value)
-                                break
-                        else:
-                            if group.sensors:
-                                self._history["gpu_temp"].append(group.sensors[0].value)
-                    elif group.name == "Power":
-                        for sensor in group.sensors:
-                            if "Current Draw" in sensor.label:
-                                self._history["gpu_power"].append(sensor.value)
-                                break
-                                
-            elif component.component_type == "System":
-                # Memory and swap
-                for group in component.groups:
-                    if group.name == "Usage":
-                        for sensor in group.sensors:
-                            if "RAM" in sensor.label or "Memory" in sensor.label:
-                                self._history["ram_pct"].append(sensor.value)
-                            elif "Swap" in sensor.label:
-                                self._history["swap_pct"].append(sensor.value)
-                                
-            elif component.component_type == "Network":
-                # Network traffic
-                for group in component.groups:
-                    if group.name == "Traffic":
-                        for sensor in group.sensors:
-                            if "Download" in sensor.label:
-                                self._history["net_down"].append(sensor.value)
-                            elif "Upload" in sensor.label:
-                                self._history["net_up"].append(sensor.value)
-        
-        # Ensure all history keys have at least one value
-        for key in ["cpu_total", "cpu_temp", "gpu_util", "gpu_temp", "gpu_power",
-                    "ram_pct", "swap_pct", "net_down", "net_up"]:
-            if not self._history[key]:
-                self._history[key].append(0.0)
-                
-        # Track core count for bar chart
-        self._core_count = core_count
-        self._freq_count = freq_count
-        
-    def _update_visible_charts(self) -> None:
-        """Update only the charts in the currently visible tab."""
-        current_tab = self.tabs.currentIndex()
-        tab_text = self.tabs.tabText(current_tab)
-        
-        if tab_text == "📊 Overview":
-            self._update_overview_charts()
-        elif tab_text == "🔲 CPU":
-            self._update_cpu_charts()
-        elif tab_text == "🧮 Memory":
-            self._update_memory_charts()
-        elif tab_text == "🎮 GPU":
-            self._update_gpu_charts()
-        elif tab_text == "🌐 Network":
-            self._update_network_charts()
-            
-    def _update_overview_charts(self) -> None:
-        """Update the Overview tab charts."""
-        # CPU Usage %
-        if self._history["cpu_total"]:
-            self.cpu_usage_plot.setData(list(self._history["cpu_total"]))
-            
-        # CPU Temperature
-        if self._history["cpu_temp"]:
-            self.cpu_temp_plot.setData(list(self._history["cpu_temp"]))
-            
-        # GPU Usage %
-        if self._history["gpu_util"]:
-            self.gpu_usage_plot.setData(list(self._history["gpu_util"]))
-            
-        # GPU Temperature
-        if self._history["gpu_temp"]:
-            self.gpu_temp_plot.setData(list(self._history["gpu_temp"]))
-            
-    def _update_cpu_charts(self) -> None:
-        """Update the CPU tab charts."""
-        # Core utilization bars
-        if hasattr(self, '_core_count') and self._core_count > 0:
-            x_vals = list(range(self._core_count))
-            heights = []
-            brushes = []
-            
-            for i in range(self._core_count):
-                key = f"cpu_core_{i}"
-                if self._history[key]:
-                    value = self._history[key][-1]
-                    heights.append(value)
-                    brushes.append(get_color_for_value(value, "%"))
-                else:
-                    heights.append(0.0)
-                    brushes.append("#666666")
-                    
-            self.cpu_util_bars.setOpts(x=x_vals, height=heights, brush=brushes)
-            
-        # Core frequency lines
-        if hasattr(self, '_freq_count') and self._freq_count > 0:
-            # Clear existing plots
-            for plot in self.cpu_freq_plots:
-                self.cpu_freq_widget.removeItem(plot)
-            self.cpu_freq_plots.clear()
-            
-            # Create new plots for each core
-            for i in range(self._freq_count):
-                key = f"cpu_freq_{i}"
-                if self._history[key]:
-                    color = pg.mkColor(get_color_for_value(self._history[key][-1] if self._history[key] else 0, "GHz"))
-                    plot = self.cpu_freq_widget.plot(list(self._history[key]), 
-                                                     pen=color, width=1.5,
-                                                     name=f"Core {i}")
-                    self.cpu_freq_plots.append(plot)
-                    
-    def _update_memory_charts(self) -> None:
-        """Update the Memory tab charts."""
-        # RAM Usage
-        if self._history["ram_pct"]:
-            self.ram_plot.setData(list(self._history["ram_pct"]))
-            
-        # Swap Usage
-        if self._history["swap_pct"]:
-            self.swap_plot.setData(list(self._history["swap_pct"]))
-            
-    def _update_gpu_charts(self) -> None:
-        """Update the GPU tab charts."""
-        # GPU Utilization
-        if self._history["gpu_util"]:
-            self.gpu_util_detail_plot.setData(list(self._history["gpu_util"]))
-            
-        # GPU Temperature
-        if self._history["gpu_temp"]:
-            self.gpu_temp_detail_plot.setData(list(self._history["gpu_temp"]))
-            
-        # GPU Power
-        if self._history["gpu_power"]:
-            self.gpu_power_plot.setData(list(self._history["gpu_power"]))
-            
-    def _update_network_charts(self) -> None:
-        """Update the Network tab charts."""
-        # Download
-        if self._history["net_down"]:
-            self.net_down_plot.setData(list(self._history["net_down"]))
-            
-        # Upload
-        if self._history["net_up"]:
-            self.net_up_plot.setData(list(self._history["net_up"]))
-            
-    def set_sensor_status(self, lm_ok: bool, nvml_ok: bool) -> None:
-        """
-        Update sensor status in the status bar.
-        
-        Parameters
-        ----------
-        lm_ok : bool
-            Whether lm-sensors is working.
-        nvml_ok : bool
-            Whether NVML (NVIDIA Management Library) is working.
-        """
-        self._lm_sensors_ok = lm_ok
-        self._nvml_ok = nvml_ok
-        
-        lm_status = "✅" if lm_ok else "❌"
-        nvml_status = "✅" if nvml_ok else "❌"
-        
-        self.status_sensor_status.setText(f"lm-sensors {lm_status}   NVML {nvml_status}")
-        self.tree_label.setText("Hardware Tree")
-        
-    def _on_timer_update(self) -> None:
-        """Timer callback for testing - generates dummy data."""
-        # This is for testing only - in real use, update_dashboard would be called
-        # with real hardware tree data
-        pass
+            self.device_page.show_device(self._page)
+            self.stack.setCurrentWidget(self.device_page)
+            entry = self._entries.get(self._page)
+            self.page_title.setText(entry.name.text() if entry else "")
+        if self.history.latest:
+            self._refresh_page(self.history.latest)
 
+    def _rebuild_sidebar(self, snap: Snapshot) -> None:
+        self.sidebar.blockSignals(True)
+        self.sidebar.clear()
+        self._entries.clear()
+        rows = [(OVERVIEW, "overview", "Overview", "All devices at a glance")]
+        rows += [(d.id, d.kind, d.name, d.detail) for d in snap.devices]
+        for dev_id, icon_name, name, detail in rows:
+            item = QListWidgetItem(self.sidebar)
+            item.setData(_ID, dev_id)
+            entry = SidebarEntry(icon_name, name, detail)
+            item.setSizeHint(entry.sizeHint())
+            self.sidebar.setItemWidget(item, entry)
+            self._entries[dev_id] = entry
+        self._sidebar_ids = [d.id for d in snap.devices]
+        self.sidebar.blockSignals(False)
+        self.select(self._page if self._page in self._entries else OVERVIEW)
 
-# ---------------------------------------------------------------------------
-# Test function
-# ---------------------------------------------------------------------------
+    def on_snapshot(self, snap: Snapshot) -> None:
+        if [d.id for d in snap.devices] != self._sidebar_ids:
+            self._rebuild_sidebar(snap)
+        for d in snap.devices:
+            entry = self._entries.get(d.id)
+            if entry:
+                entry.summary.setText(pick.summary(d))
+        if self.isVisible():
+            self._refresh_page(snap)
+        count = sum(1 for r in snap.readings() if r.kind != Kind.INFO)
+        self.status_sensors.setText(f"{count} sensors · {len(snap.devices)} devices")
+        self.status_hint.setText("" if snap.status.get("hwmon") else
+                                 "No temperature or fan chips found. Install lm-sensors and run "
+                                 "'sudo sensors-detect', then restart CoreX.")
+        self.status_time.setText("Updated " + time.strftime("%H:%M:%S", time.localtime(snap.timestamp)))
 
-if __name__ == "__main__":
-    import sys
-    
-    # Set platform for headless testing if needed
-    if not QApplication.instance():
-        app = QApplication(sys.argv)
-        
-    # Create and show dashboard
-    dash = CoreXDashboard()
-    dash.show()
-    
-    # Set dummy sensor status
-    dash.set_sensor_status(True, True)
-    
-    print("Dashboard visible — close to exit")
-    sys.exit(app.exec())
+    def _refresh_page(self, snap: Snapshot) -> None:
+        if self._page == OVERVIEW:
+            self.overview.refresh(snap, self.history)
+        else:
+            self.device_page.refresh(snap, self.history, self.widget_ids)
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        if self.history.latest and self._page == OVERVIEW:
+            self.overview.refresh(self.history.latest, self.history)
+
+    def closeEvent(self, e):
+        if self.hide_on_close:
+            e.ignore()
+            self.hide()
+        else:
+            e.accept()
+            self.quit_requested.emit()
