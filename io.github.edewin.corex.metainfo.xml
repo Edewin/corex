@@ -39,16 +39,24 @@
 
   <screenshots>
     <screenshot type="default">
-      <caption>CoreX Overview</caption>
-      <image>https://raw.githubusercontent.com/Edewin/corex/b821dfbd5fd42971731954c342e34553f5da003b/corex/assets/screenshots/corex_desktop.png</image>
+      <caption>Dashboard with live charts</caption>
+      <image>https://raw.githubusercontent.com/Edewin/corex/7056eeccd7c3cd95de611ddb3d417a31401ba0b9/corex/assets/screenshots/dashboard.png</image>
     </screenshot>
     <screenshot>
-      <caption>CoreX Hardware Tree View</caption>
-      <image>https://raw.githubusercontent.com/Edewin/corex/b821dfbd5fd42971731954c342e34553f5da003b/corex/assets/screenshots/corex_dashboard_tree.png</image>
+      <caption>Every sensor in one list, charts on demand</caption>
+      <image>https://raw.githubusercontent.com/Edewin/corex/7056eeccd7c3cd95de611ddb3d417a31401ba0b9/corex/assets/screenshots/list.png</image>
     </screenshot>
     <screenshot>
-      <caption>CoreX Desktop Widget</caption>
-      <image>https://raw.githubusercontent.com/Edewin/corex/b821dfbd5fd42971731954c342e34553f5da003b/corex/assets/screenshots/corex_widget.png</image>
+      <caption>Device page</caption>
+      <image>https://raw.githubusercontent.com/Edewin/corex/7056eeccd7c3cd95de611ddb3d417a31401ba0b9/corex/assets/screenshots/device.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Always-on-top widget</caption>
+      <image>https://raw.githubusercontent.com/Edewin/corex/7056eeccd7c3cd95de611ddb3d417a31401ba0b9/corex/assets/screenshots/widget.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>First start: choose your view</caption>
+      <image>https://raw.githubusercontent.com/Edewin/corex/7056eeccd7c3cd95de611ddb3d417a31401ba0b9/corex/assets/screenshots/firstrun.png</image>
     </screenshot>
   </screenshots>
 
