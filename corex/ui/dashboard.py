@@ -331,7 +331,7 @@ class MainWindow(QMainWindow):
         self.autostart_action.toggled.connect(self.autostart_changed)
         menu.setToolTipsVisible(True)
         menu.addSeparator()
-        menu.addAction("About CoreX", self.about_requested)
+        menu.addAction("About CoreX", self.about_requested.emit)
         quit_action = QAction("Quit CoreX", self)
         quit_action.setShortcut("Ctrl+Q")
         quit_action.triggered.connect(self.quit_requested)

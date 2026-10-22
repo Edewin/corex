@@ -146,8 +146,8 @@ class Overlay(QWidget):
 
     def contextMenuEvent(self, e):
         menu = QMenu(self)
-        menu.addAction("Open CoreX", self.open_dashboard)
-        menu.addAction("Choose values…", self.choose_values)
+        menu.addAction("Open CoreX", self.open_dashboard.emit)
+        menu.addAction("Choose values…", self.choose_values.emit)
         sub = menu.addMenu("Opacity")
         group = QActionGroup(sub)
         for o in OPACITIES:
@@ -156,8 +156,8 @@ class Overlay(QWidget):
             group.addAction(a)
             sub.addAction(a)
         menu.addSeparator()
-        menu.addAction("Hide widget", self.hide_requested)
-        menu.addAction("Quit CoreX", self.quit_requested)
+        menu.addAction("Hide widget", self.hide_requested.emit)
+        menu.addAction("Quit CoreX", self.quit_requested.emit)
         menu.exec(e.globalPos())
 
     def _set_opacity(self, o: float) -> None:
