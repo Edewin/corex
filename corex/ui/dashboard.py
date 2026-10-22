@@ -250,9 +250,9 @@ class CoreXDashboard(QMainWindow):
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(8, 8, 8, 8)
         
-        tree_label = QLabel("Hardware Tree")
-        tree_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #1D9E75;")
-        left_layout.addWidget(tree_label)
+        self.tree_label = QLabel("Loading sensors...")
+        self.tree_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #1D9E75;")
+        left_layout.addWidget(self.tree_label)
         
         self.tree_widget = HardwareTreeWidget()
         left_layout.addWidget(self.tree_widget)
@@ -724,6 +724,7 @@ class CoreXDashboard(QMainWindow):
         nvml_status = "✅" if nvml_ok else "❌"
         
         self.status_sensor_status.setText(f"lm-sensors {lm_status}   NVML {nvml_status}")
+        self.tree_label.setText("Hardware Tree")
         
     def _on_timer_update(self) -> None:
         """Timer callback for testing - generates dummy data."""
