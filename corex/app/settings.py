@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 INTERVALS_S = (0.5, 1.0, 2.0, 5.0)
+VIEW_MODES = ("list", "dashboard")
 
 
 def config_dir() -> Path:
@@ -24,6 +25,13 @@ class Settings:
     widget_visible: bool = True
     widget_opacity: float = 0.92
     last_page: str = "overview"
+    view_mode: str | None = None                                  # "list" / "dashboard"; None = ask on first run
+    hidden: list[str] = field(default_factory=list)               # reading ids hidden from the tables
+    show_hidden: bool = False
+    collapsed: list[str] = field(default_factory=list)            # folded device / group rows
+    charts: list[str] = field(default_factory=list)               # reading ids charted in the List view
+    columns: dict[str, list[int]] = field(default_factory=dict)   # table -> widths of Value, Min, Max
+    autostart: bool = False
 
     @classmethod
     def load(cls, path: Path | None = None) -> Settings:
@@ -36,6 +44,8 @@ class Settings:
         s = cls(**known)
         if s.interval_s not in INTERVALS_S:
             s.interval_s = 1.0
+        if s.view_mode not in VIEW_MODES:
+            s.view_mode = None
         return s
 
     def save(self, path: Path | None = None) -> None:

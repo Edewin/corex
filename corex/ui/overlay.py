@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QRectF, Qt, Signal
-from PySide6.QtGui import QAction, QActionGroup, QColor, QPainter, QPainterPath
+from PySide6.QtGui import QAction, QActionGroup, QColor, QGuiApplication, QPainter, QPainterPath
 from PySide6.QtWidgets import QGridLayout, QLabel, QMenu, QVBoxLayout, QWidget
 
 from corex.core.model import Kind, Snapshot
@@ -108,6 +108,15 @@ class Overlay(QWidget):
             if pct:
                 bar.set(r.value, theme.KIND_COLORS[Kind.LOAD] if color == theme.TEXT else color)
         self.adjustSize()
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        self.adjustSize()
+        if QGuiApplication.screenAt(self.frameGeometry().center()) is None:   # saved spot is off every screen
+            screen = QGuiApplication.primaryScreen()
+            if screen:
+                area = screen.availableGeometry()
+                self.move(area.right() - self.width() - 24, area.top() + 24)
 
     # -- painting & mouse --------------------------------------------------
     def paintEvent(self, _):

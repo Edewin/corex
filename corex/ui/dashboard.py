@@ -1,37 +1,35 @@
-"""Main window: device sidebar, overview, per-device pages with tiles and a sensor table."""
+"""Main window: List view (one sensor tree) or Dashboard (sidebar, overview, device pages)."""
 
 from __future__ import annotations
 
 import time
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QAction, QGuiApplication
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QAbstractItemView,
+    QButtonGroup,
     QComboBox,
     QGridLayout,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
     QMenu,
     QScrollArea,
+    QSplitter,
     QStackedWidget,
     QToolButton,
-    QTreeWidget,
-    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
 from corex import __version__
 from corex.app.poller import History
-from corex.app.settings import INTERVALS_S
-from corex.core.model import Device, Kind, Snapshot
-from corex.core.units import format_value
+from corex.app.settings import INTERVALS_S, Settings
+from corex.core.model import Kind, Snapshot
 from corex.ui import pick, theme
+from corex.ui.sensortree import SensorTree
 from corex.ui.tiles import SidebarEntry, Tile
 
 OVERVIEW = "overview"
@@ -49,114 +47,8 @@ def _tile_grid(tiles: list[Tile], columns: int) -> QGridLayout:
     return grid
 
 
-# ---------------------------------------------------------------------------
-class SensorTable(QTreeWidget):
-    renamed = Signal(str, str)           # reading id, new label ("" = back to default)
-    widget_toggled = Signal(str, bool)
-
-    COLS = ("Sensor", "Value", "Min", "Max", "Widget")
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setColumnCount(len(self.COLS))
-        self.setHeaderLabels(self.COLS)
-        self.setAlternatingRowColors(True)
-        self.setUniformRowHeights(True)
-        self.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.EditKeyPressed)
-        h = self.header()
-        h.setStretchLastSection(False)
-        h.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for c in (1, 2, 3):
-            h.setSectionResizeMode(c, QHeaderView.ResizeMode.Fixed)
-            self.setColumnWidth(c, 130)
-        h.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        self.setColumnWidth(4, 70)
-        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.customContextMenuRequested.connect(self._menu)
-        self.itemChanged.connect(self._changed)
-        self._items: dict[str, QTreeWidgetItem] = {}
-        self.signature: tuple = ()
-        self._updating = False
-        self._mono = theme.mono_font(10)
-
-    def show_device(self, device: Device, widget_ids: set[str]) -> None:
-        signature = tuple((g.name, tuple(r.id for r in g.readings)) for g in device.groups)
-        if signature != self.signature:
-            self._build(device)
-            self.signature = signature
-        editing = self.state() == QAbstractItemView.State.EditingState
-        self._updating = True
-        for g in device.groups:
-            for r in g.readings:
-                item = self._items[r.id]
-                if not editing and item.text(0) != r.label:
-                    item.setText(0, r.label)
-                item.setText(1, format_value(r.kind, r.value, r.text))
-                item.setForeground(1, theme.qcolor(theme.level_color(r.kind, r.value)))
-                if r.kind != Kind.INFO:
-                    item.setText(2, format_value(r.kind, r.min))
-                    item.setText(3, format_value(r.kind, r.max))
-                    item.setCheckState(4, Qt.CheckState.Checked if r.id in widget_ids else Qt.CheckState.Unchecked)
-        self._updating = False
-
-    def _build(self, device: Device) -> None:
-        self._updating = True
-        self.clear()
-        self._items.clear()
-        for g in device.groups:
-            parent = QTreeWidgetItem(self, [g.name])
-            parent.setFirstColumnSpanned(True)
-            parent.setForeground(0, theme.qcolor(theme.MUTED))
-            f = parent.font(0)
-            f.setBold(True)
-            parent.setFont(0, f)
-            parent.setFlags(Qt.ItemFlag.ItemIsEnabled)
-            for r in g.readings:
-                item = QTreeWidgetItem(parent, [r.label])
-                item.setData(0, _ID, r.id)
-                item.setToolTip(0, "Double-click to rename")
-                flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable
-                if r.kind != Kind.INFO:
-                    flags |= Qt.ItemFlag.ItemIsUserCheckable
-                    item.setCheckState(4, Qt.CheckState.Unchecked)
-                    item.setToolTip(4, "Show this value in the floating widget")
-                item.setFlags(flags)
-                for c in (1, 2, 3):
-                    item.setFont(c, self._mono)
-                    item.setTextAlignment(c, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                self._items[r.id] = item
-            parent.setExpanded(True)
-        self._updating = False
-
-    def _changed(self, item: QTreeWidgetItem, column: int) -> None:
-        if self._updating:
-            return
-        rid = item.data(0, _ID)
-        if not rid:
-            return
-        if column == 0:
-            self.renamed.emit(rid, item.text(0).strip())
-        elif column == 4:
-            self.widget_toggled.emit(rid, item.checkState(4) == Qt.CheckState.Checked)
-
-    def _menu(self, pos) -> None:
-        item = self.itemAt(pos)
-        rid = item.data(0, _ID) if item else None
-        if not rid:
-            return
-        menu = QMenu(self)
-        menu.addAction("Rename…", lambda: self.editItem(item, 0))
-        menu.addAction("Restore original name", lambda: self.renamed.emit(rid, ""))
-        menu.addSeparator()
-        menu.addAction("Copy value", lambda: QGuiApplication.clipboard().setText(item.text(1)))
-        menu.addAction("Copy name and value",
-                       lambda: QGuiApplication.clipboard().setText(f"{item.text(0)}: {item.text(1)}"))
-        if item.flags() & Qt.ItemFlag.ItemIsUserCheckable:
-            on = item.checkState(4) == Qt.CheckState.Checked
-            menu.addSeparator()
-            menu.addAction("Remove from widget" if on else "Show in widget",
-                           lambda: item.setCheckState(4, Qt.CheckState.Unchecked if on else Qt.CheckState.Checked))
-        menu.exec(self.viewport().mapToGlobal(pos))
+def _tree_refresh(tree: SensorTree, devices, widget_ids: set[str], prefs: Settings) -> None:
+    tree.refresh(devices, widget_ids, set(prefs.charts), set(prefs.hidden), prefs.show_hidden, set(prefs.collapsed))
 
 
 # ---------------------------------------------------------------------------
@@ -186,15 +78,15 @@ class DevicePage(QWidget):
         self.tiles_host = QWidget()
         self.tiles_host.setLayout(QGridLayout())
         lay.addWidget(self.tiles_host)
-        self.table = SensorTable()
+        self.table = SensorTree(all_devices=False, charts=False)
         lay.addWidget(self.table, 1)
 
     def show_device(self, device_id: str) -> None:
         self.device_id = device_id
         self.tile_ids = []
-        self.table.signature = ()
+        self.table.invalidate()
 
-    def refresh(self, snap: Snapshot, history: History, widget_ids: set[str]) -> None:
+    def refresh(self, snap: Snapshot, history: History, widget_ids: set[str], prefs: Settings) -> None:
         dev = snap.device(self.device_id) if self.device_id else None
         if dev is None:
             return
@@ -210,7 +102,7 @@ class DevicePage(QWidget):
             self.tiles_host.setVisible(bool(self.tiles))
         for t in self.tiles:
             t.refresh(snap, history)
-        self.table.show_device(dev, widget_ids)
+        _tree_refresh(self.table, [dev], widget_ids, prefs)
 
 
 class OverviewPage(QScrollArea):
@@ -242,6 +134,51 @@ class OverviewPage(QScrollArea):
             t.refresh(snap, history)
 
 
+class ListPage(QSplitter):
+    """Every device in one tree; charts only for the values the user asks for."""
+
+    chart_closed = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(Qt.Orientation.Vertical, parent)
+        self.setChildrenCollapsible(False)
+        self.tree = SensorTree(all_devices=True, charts=True)
+        self.addWidget(self.tree)
+        self.charts = QScrollArea()
+        self.charts.setWidgetResizable(True)
+        self.charts.setWidget(QWidget())
+        self.addWidget(self.charts)
+        self.charts.hide()
+        self.tiles: list[Tile] = []
+        self._key: tuple = ()
+
+    def refresh(self, snap: Snapshot, history: History, widget_ids: set[str], prefs: Settings) -> None:
+        _tree_refresh(self.tree, snap.devices, widget_ids, prefs)
+        wanted = []
+        for rid in prefs.charts:
+            dev = next((d for d in snap.devices if d.reading(rid)), None)
+            if dev:
+                wanted.append((dev.id, rid))
+        columns = max(1, min(4, self.width() // 320))
+        if (tuple(wanted), columns) != self._key:
+            self._key = (tuple(wanted), columns)
+            host = QWidget()
+            outer = QVBoxLayout(host)
+            outer.setContentsMargins(16, 12, 16, 12)
+            self.tiles = [Tile(dev_id, [rid], show_device=True, closable=True) for dev_id, rid in wanted]
+            for t in self.tiles:
+                t.closed.connect(self.chart_closed)
+            outer.addLayout(_tile_grid(self.tiles, columns))
+            outer.addStretch(1)
+            self.charts.setWidget(host)
+            opening = self.charts.isHidden() and self.tiles
+            self.charts.setVisible(bool(self.tiles))
+            if opening:
+                self.setSizes([max(200, self.height() - 236), 236])
+        for t in self.tiles:
+            t.refresh(snap, history)
+
+
 # ---------------------------------------------------------------------------
 class MainWindow(QMainWindow):
     interval_changed = Signal(float)
@@ -249,15 +186,20 @@ class MainWindow(QMainWindow):
     toggle_widget = Signal()
     renamed = Signal(str, str)
     widget_toggled = Signal(str, bool)
+    view_changed = Signal(str)
+    autostart_changed = Signal(bool)
+    prefs_changed = Signal()             # hidden / collapsed / charts / columns changed in prefs
     about_requested = Signal()
     quit_requested = Signal()
 
-    def __init__(self, history: History, interval_s: float, start_page: str = OVERVIEW):
+    def __init__(self, history: History, prefs: Settings):
         super().__init__()
         self.history = history
+        self.prefs = prefs
         self.widget_ids: set[str] = set()
         self.hide_on_close = False
-        self._page = start_page
+        self.mode = prefs.view_mode or "dashboard"
+        self._page = prefs.last_page
         self._sidebar_ids: list[str] | None = None
         self._entries: dict[str, SidebarEntry] = {}
         self.setWindowTitle(f"CoreX {__version__}")
@@ -268,10 +210,10 @@ class MainWindow(QMainWindow):
         h.setContentsMargins(0, 0, 0, 0)
         h.setSpacing(0)
 
-        side = QWidget()
-        side.setFixedWidth(280)
-        side.setStyleSheet(f"background: {theme.PANEL};")
-        sv = QVBoxLayout(side)
+        self.side = QWidget()
+        self.side.setFixedWidth(280)
+        self.side.setStyleSheet(f"background: {theme.PANEL};")
+        sv = QVBoxLayout(self.side)
         sv.setContentsMargins(0, 16, 0, 8)
         brand = QLabel(f"<span style='color:{theme.ACCENT}; font-size:17pt; font-weight:700'>Core</span>"
                        f"<span style='font-size:17pt; font-weight:700'>X</span>"
@@ -282,21 +224,29 @@ class MainWindow(QMainWindow):
         self.sidebar.setObjectName("sidebar")
         self.sidebar.currentItemChanged.connect(self._on_select)
         sv.addWidget(self.sidebar, 1)
-        h.addWidget(side)
+        h.addWidget(self.side)
 
         main = QWidget()
         mv = QVBoxLayout(main)
         mv.setContentsMargins(0, 0, 0, 0)
         mv.setSpacing(0)
-        mv.addWidget(self._toolbar(interval_s))
+        mv.addWidget(self._toolbar(prefs.interval_s))
         self.stack = QStackedWidget()
         self.overview = OverviewPage()
         self.overview.open_device.connect(self.select)
         self.device_page = DevicePage()
-        self.device_page.table.renamed.connect(self.renamed)
-        self.device_page.table.widget_toggled.connect(self.widget_toggled)
-        self.stack.addWidget(self.overview)
-        self.stack.addWidget(self.device_page)
+        self.list_page = ListPage()
+        self.list_page.chart_closed.connect(lambda rid: self._toggle_pref("charts", rid, False))
+        for tree, key in ((self.device_page.table, "device"), (self.list_page.tree, "list")):
+            tree.set_widths(prefs.columns.get(key))
+            tree.renamed.connect(self.renamed)
+            tree.widget_toggled.connect(self.widget_toggled)
+            tree.chart_toggled.connect(lambda rid, on: self._toggle_pref("charts", rid, on))
+            tree.hide_toggled.connect(lambda rid, on: self._toggle_pref("hidden", rid, on))
+            tree.collapsed_changed.connect(lambda k, on: self._toggle_pref("collapsed", k, on, refresh=False))
+            tree.widths_changed.connect(lambda w, key=key: self._set_widths(key, w))
+        for page in (self.overview, self.device_page, self.list_page):
+            self.stack.addWidget(page)
         mv.addWidget(self.stack, 1)
         h.addWidget(main, 1)
         self.setCentralWidget(root)
@@ -309,6 +259,7 @@ class MainWindow(QMainWindow):
         sb.addWidget(self.status_sensors)
         sb.addWidget(self.status_hint, 1)
         sb.addPermanentWidget(self.status_time)
+        self.set_view(self.mode)
 
     def _toolbar(self, interval_s: float) -> QWidget:
         bar = QWidget()
@@ -320,6 +271,24 @@ class MainWindow(QMainWindow):
         self.page_title.setObjectName("h2")
         lay.addWidget(self.page_title)
         lay.addStretch(1)
+
+        self.view_buttons: dict[str, QToolButton] = {}
+        group = QButtonGroup(bar)
+        for mode, text, icon_name, key in (("list", "List", "list", "Ctrl+1"),
+                                           ("dashboard", "Dashboard", "overview", "Ctrl+2")):
+            b = QToolButton()
+            b.setText(text)
+            b.setIcon(theme.icon(icon_name, theme.TEXT, 16))
+            b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            b.setCheckable(True)
+            b.setShortcut(key)
+            b.setToolTip({"list": "All sensors in one list, charts only when you ask for them",
+                          "dashboard": "Devices on the left, charts for each one"}[mode] + f" ({key})")
+            b.clicked.connect(lambda _=False, m=mode: self._choose_view(m))
+            group.addButton(b)
+            lay.addWidget(b)
+            self.view_buttons[mode] = b
+        lay.addSpacing(12)
 
         self.interval = QComboBox()
         self.interval.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
@@ -351,8 +320,18 @@ class MainWindow(QMainWindow):
         menu_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         menu_btn.setStyleSheet("QToolButton::menu-indicator { image: none; }")
         menu = QMenu(menu_btn)
-        menu.addAction("About CoreX", self.about_requested)
+        self.show_hidden_action = menu.addAction("Show hidden sensors")
+        self.show_hidden_action.setCheckable(True)
+        self.show_hidden_action.setChecked(self.prefs.show_hidden)
+        self.show_hidden_action.setToolTip("Hidden sensors appear greyed out; right-click one to bring it back")
+        self.show_hidden_action.toggled.connect(self._set_show_hidden)
+        self.autostart_action = menu.addAction("Start with system")
+        self.autostart_action.setCheckable(True)
+        self.autostart_action.setChecked(self.prefs.autostart)
+        self.autostart_action.toggled.connect(self.autostart_changed)
+        menu.setToolTipsVisible(True)
         menu.addSeparator()
+        menu.addAction("About CoreX", self.about_requested)
         quit_action = QAction("Quit CoreX", self)
         quit_action.setShortcut("Ctrl+Q")
         quit_action.triggered.connect(self.quit_requested)
@@ -367,7 +346,32 @@ class MainWindow(QMainWindow):
         self.addAction(toggle)
         return bar
 
-    # ------------------------------------------------------------------
+    # -- view ------------------------------------------------------------
+    def set_view(self, mode: str) -> None:
+        self.mode = mode
+        self.side.setVisible(mode == "dashboard")
+        for m, b in self.view_buttons.items():
+            b.setChecked(m == mode)
+        self._show_page()
+
+    def _choose_view(self, mode: str) -> None:
+        if mode != self.mode:
+            self.set_view(mode)
+            self.view_changed.emit(mode)
+
+    def _show_page(self) -> None:
+        if self.mode == "list":
+            self.stack.setCurrentWidget(self.list_page)
+            self.page_title.setText("All sensors")
+        elif self._page == OVERVIEW or self._page not in self._entries:
+            self.stack.setCurrentWidget(self.overview)
+            self.page_title.setText("Overview")
+        else:
+            self.device_page.show_device(self._page)
+            self.stack.setCurrentWidget(self.device_page)
+            self.page_title.setText(self._entries[self._page].name.text())
+        self._refresh_now()
+
     def select(self, page: str) -> None:
         for i in range(self.sidebar.count()):
             if self.sidebar.item(i).data(_ID) == page:
@@ -379,20 +383,36 @@ class MainWindow(QMainWindow):
         return self._page
 
     def _on_select(self, current: QListWidgetItem | None, _prev=None) -> None:
-        if current is None:
-            return
-        self._page = current.data(_ID)
-        if self._page == OVERVIEW:
-            self.stack.setCurrentWidget(self.overview)
-            self.page_title.setText("Overview")
-        else:
-            self.device_page.show_device(self._page)
-            self.stack.setCurrentWidget(self.device_page)
-            entry = self._entries.get(self._page)
-            self.page_title.setText(entry.name.text() if entry else "")
-        if self.history.latest:
-            self._refresh_page(self.history.latest)
+        if current is not None:
+            self._page = current.data(_ID)
+            self._show_page()
 
+    # -- preferences -----------------------------------------------------
+    def _toggle_pref(self, name: str, value: str, on: bool, refresh: bool = True) -> None:
+        values = getattr(self.prefs, name)
+        if on and value not in values:
+            values.append(value)
+        elif not on and value in values:
+            values.remove(value)
+        self.prefs_changed.emit()
+        if refresh:
+            self._refresh_now()
+
+    def _set_widths(self, key: str, widths: list[int]) -> None:
+        self.prefs.columns[key] = widths
+        self.prefs_changed.emit()
+
+    def _set_show_hidden(self, on: bool) -> None:
+        self.prefs.show_hidden = on
+        self.prefs_changed.emit()
+        self._refresh_now()
+
+    def set_autostart_checked(self, on: bool) -> None:
+        self.autostart_action.blockSignals(True)
+        self.autostart_action.setChecked(on)
+        self.autostart_action.blockSignals(False)
+
+    # -- data ------------------------------------------------------------
     def _rebuild_sidebar(self, snap: Snapshot) -> None:
         self.sidebar.blockSignals(True)
         self.sidebar.clear()
@@ -408,7 +428,10 @@ class MainWindow(QMainWindow):
             self._entries[dev_id] = entry
         self._sidebar_ids = [d.id for d in snap.devices]
         self.sidebar.blockSignals(False)
-        self.select(self._page if self._page in self._entries else OVERVIEW)
+        if self._page not in self._entries:
+            self._page = OVERVIEW
+        self.select(self._page)
+        self._show_page()
 
     def on_snapshot(self, snap: Snapshot) -> None:
         if [d.id for d in snap.devices] != self._sidebar_ids:
@@ -426,16 +449,23 @@ class MainWindow(QMainWindow):
                                  "'sudo sensors-detect', then restart CoreX.")
         self.status_time.setText("Updated " + time.strftime("%H:%M:%S", time.localtime(snap.timestamp)))
 
+    def _refresh_now(self) -> None:
+        if self.history.latest:
+            self._refresh_page(self.history.latest)
+
     def _refresh_page(self, snap: Snapshot) -> None:
-        if self._page == OVERVIEW:
+        page = self.stack.currentWidget()
+        if page is self.list_page:
+            self.list_page.refresh(snap, self.history, self.widget_ids, self.prefs)
+        elif page is self.overview:
             self.overview.refresh(snap, self.history)
         else:
-            self.device_page.refresh(snap, self.history, self.widget_ids)
+            self.device_page.refresh(snap, self.history, self.widget_ids, self.prefs)
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
-        if self.history.latest and self._page == OVERVIEW:
-            self.overview.refresh(self.history.latest, self.history)
+        if self.stack.currentWidget() is not self.device_page:
+            self._refresh_now()
 
     def closeEvent(self, e):
         if self.hide_on_close:

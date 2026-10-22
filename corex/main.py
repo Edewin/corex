@@ -10,6 +10,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 
 from corex import __version__
+from corex.app import autostart
 from corex.app.poller import History, Poller
 from corex.app.settings import Settings
 from corex.core.engine import Engine
@@ -17,6 +18,7 @@ from corex.core.model import Snapshot
 from corex.ui import pick, theme
 from corex.ui.about import AboutDialog
 from corex.ui.dashboard import MainWindow
+from corex.ui.firstrun import FirstRunDialog
 from corex.ui.overlay import Overlay
 
 ICON_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "corex_icon.svg")
@@ -28,8 +30,11 @@ class CoreXApp:
         self.settings = Settings.load()
         self.history = History()
         self.engine = Engine(labels=self.settings.labels)
+        if self.settings.view_mode is None and not start_hidden:
+            self.settings.view_mode, self.settings.widget_visible = FirstRunDialog.ask()
+            self.settings.save()
 
-        self.window = MainWindow(self.history, self.settings.interval_s, self.settings.last_page)
+        self.window = MainWindow(self.history, self.settings)
         self.overlay = Overlay(self.settings.widget_opacity)
         if self.settings.widget_readings is not None:
             self.overlay.set_readings(self.settings.widget_readings)
@@ -44,6 +49,9 @@ class CoreXApp:
         w.toggle_widget.connect(self.toggle_widget)
         w.renamed.connect(self._rename)
         w.widget_toggled.connect(self._widget_toggled)
+        w.view_changed.connect(lambda m: self._save(view_mode=m))
+        w.prefs_changed.connect(self.settings.save)
+        w.autostart_changed.connect(self._set_autostart)
         w.about_requested.connect(lambda: AboutDialog(w).exec())
         w.quit_requested.connect(self.quit)
         o.open_dashboard.connect(self.show_window)
@@ -123,9 +131,18 @@ class CoreXApp:
         if on:
             self.set_widget_visible(True)
 
+    def _set_autostart(self, on: bool) -> None:
+        error = autostart.set_enabled(on)
+        if error:
+            self.window.set_autostart_checked(not on)
+            self.window.statusBar().showMessage(error, 10000)
+        else:
+            self._save(autostart=on)
+
     def _choose_values(self) -> None:
         self.show_window()
         self.window.statusBar().showMessage(
+            "Tick the Widget column next to the values you want." if self.window.mode == "list" else
             "Open a device on the left and tick the Widget column next to the values you want.", 8000)
 
     # ------------------------------------------------------------------
@@ -162,6 +179,11 @@ def main() -> None:
     parser.add_argument("--hidden", action="store_true", help="start with only the widget and tray icon")
     parser.add_argument("--version", action="version", version=f"CoreX {__version__}")
     args, qt_args = parser.parse_known_args()
+
+    # The floating widget can only be placed and kept on top through X11; on a Wayland
+    # session run through XWayland unless the user picked a platform explicitly.
+    if os.environ.get("XDG_SESSION_TYPE") == "wayland" and os.environ.get("DISPLAY")             and "QT_QPA_PLATFORM" not in os.environ and "-platform" not in qt_args:
+        os.environ["QT_QPA_PLATFORM"] = "xcb"
 
     app = QApplication([sys.argv[0]] + qt_args)
     app.setApplicationName("CoreX")

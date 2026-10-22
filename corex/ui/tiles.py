@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pyqtgraph as pg
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QToolButton, QVBoxLayout, QWidget
 
 from corex.app.poller import History
 from corex.core.model import Kind, Snapshot
@@ -58,11 +58,14 @@ class Sparkline(pg.PlotWidget):
 
 class Tile(QFrame):
     clicked = Signal(str)            # device id
+    closed = Signal(str)             # first reading id (closable tiles only)
 
-    def __init__(self, device_id: str, reading_ids: list[str], show_device: bool = False, parent=None):
+    def __init__(self, device_id: str, reading_ids: list[str], show_device: bool = False,
+                 closable: bool = False, parent=None):
         super().__init__(parent)
         self.setObjectName("tile")
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        if not closable:
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.device_id, self.reading_ids, self.show_device = device_id, reading_ids, show_device
         self._kind: str | None = None
 
@@ -76,7 +79,20 @@ class Tile(QFrame):
         self.sub = QLabel()
         self.sub.setObjectName("muted")
         self.sub.setFont(theme.mono_font(9))
-        lay.addWidget(self.title)
+        head = QHBoxLayout()
+        head.setContentsMargins(0, 0, 0, 0)
+        head.addWidget(self.title, 1)
+        if closable:
+            close = QToolButton()
+            close.setIcon(theme.icon("close", theme.MUTED, 14))
+            close.setAutoRaise(True)
+            close.setFixedSize(22, 22)
+            close.setStyleSheet("QToolButton { border: none; background: transparent; padding: 0; }"
+                                f"QToolButton:hover {{ background: {theme.PANEL_HI}; border-radius: 4px; }}")
+            close.setToolTip("Remove this chart")
+            close.clicked.connect(lambda: self.closed.emit(self.reading_ids[0]))
+            head.addWidget(close)
+        lay.addLayout(head)
         lay.addWidget(self.value)
         lay.addWidget(self.sub)
         self.chart = Sparkline()

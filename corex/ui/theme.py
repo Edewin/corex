@@ -111,6 +111,9 @@ _SVG = {
     "widget": '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10h6M7 14h10"/>',
     "reset": '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>',
     "menu": '<path d="M4 7h16M4 12h16M4 17h16"/>',
+    "chart": '<path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/>',
+    "list": '<path d="M9 6h12M9 12h12M9 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/>',
+    "close": '<path d="M6 6l12 12M18 6L6 18"/>',
 }
 
 
