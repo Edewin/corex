@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from dataclasses import dataclass, field
 
 from corex.core.model import Group, Kind, Reading
@@ -29,6 +30,27 @@ _TYPES = {
     "curr":  (Kind.CURRENT, "Currents", 1000.0, "Current"),
 }
 _GROUP_ORDER = ("Temperatures", "Fans", "Power", "Voltages", "Currents")
+
+# Some drivers answer slowly (nvme asks the drive, iwlwifi the card): a value that took
+# longer than SLOW_READ_MS to read is read again only every SLOW_READ_EVERY_S seconds.
+SLOW_READ_MS = 3.0
+SLOW_READ_EVERY_S = 5.0
+_slow: dict[str, tuple[float, int | None]] = {}       # file -> (next read time, last value)
+_labels: dict[tuple[str, str], str | None] = {}       # (chip id, label file) -> text
+
+
+def _read_value(path: str) -> int | None:
+    now = time.monotonic()
+    due = _slow.get(path)
+    if due and now < due[0]:
+        return due[1]
+    raw = read_int(path)
+    took_ms = (time.monotonic() - now) * 1000
+    if took_ms > SLOW_READ_MS:
+        _slow[path] = (now + SLOW_READ_EVERY_S, raw)
+    else:
+        _slow.pop(path, None)
+    return raw
 
 # Kernel labels that are cryptic; anything not listed is shown as given.
 _LABELS = {
@@ -96,13 +118,18 @@ def _read_groups(path: str, chip_id: str) -> list[Group]:
         value_file = files.get("input") or files.get("average")
         if value_file is None:
             continue
-        raw = read_int(os.path.join(path, value_file))
+        raw = _read_value(os.path.join(path, value_file))
         if raw is None:
             continue                      # channel exists but cannot be read
         value = raw / divisor
         if kind == Kind.TEMP and (raw == 0 or not -60.0 < value < 250.0):
             continue                      # absent / disconnected sensor (exactly 0, -128, 255, ...)
-        raw_label = read_text(os.path.join(path, files["label"])) if "label" in files else None
+        raw_label = None
+        if "label" in files:
+            key = (chip_id, files["label"])
+            if key not in _labels:
+                _labels[key] = read_text(os.path.join(path, files["label"]))
+            raw_label = _labels[key]
         label = _nice_label(raw_label) if raw_label else f"{prefix} {num}"
         grouped.setdefault(group, []).append(
             Reading(id=f"{chip_id}/{ctype}{num}", label=label, kind=kind, value=value)
