@@ -25,7 +25,8 @@ RAM_TEMP_DRIVERS = ("jc42", "spd5118")
 # Leftover hwmon chips: driver pattern -> device kind
 _BOARD_CHIPS = ("nct6*", "it8*", "it87*", "w83*", "f71*", "asus*", "gigabyte_wmi", "dell_smm", "thinkpad",
                 "nzxt*", "corsair*", "aquacomputer*", "applesmc")
-_SYSTEM_NAMES = {"acpitz": "ACPI thermal zone", "pch_*": "Chipset (PCH)"}
+_SYSTEM_NAMES = {"acpitz": "ACPI thermal zone", "pch_*": "Chipset (PCH)", "BAT*": "Battery",
+                 "ucsi_source_psy_*": "USB-C port", "iwlwifi*": "Wi-Fi adapter", "AC*": "AC adapter"}
 
 
 class Engine:
@@ -108,6 +109,10 @@ class Engine:
         junk = {"", "Default string", "To be filled by O.E.M.", "System Product Name"}
         if name in junk:
             return None
+        # Lenovo keeps the model ("ThinkPad T480") in product_version; board_name is a part number
+        product = read_text(os.path.join(dmi, "product_version")) or ""
+        if vendor.upper().startswith("LENOVO") and product and product not in junk:
+            return product
         for long, short in (("ASUSTeK COMPUTER INC.", "ASUS"), ("Micro-Star International Co., Ltd.", "MSI"),
                             ("Gigabyte Technology Co., Ltd.", "Gigabyte"), ("ASRock", "ASRock")):
             if vendor.startswith(long):

@@ -100,8 +100,8 @@ def _read_groups(path: str, chip_id: str) -> list[Group]:
         if raw is None:
             continue                      # channel exists but cannot be read
         value = raw / divisor
-        if kind == Kind.TEMP and not -60.0 < value < 250.0:
-            continue                      # disconnected thermistor (-128, 255, ...)
+        if kind == Kind.TEMP and (raw == 0 or not -60.0 < value < 250.0):
+            continue                      # absent / disconnected sensor (exactly 0, -128, 255, ...)
         raw_label = read_text(os.path.join(path, files["label"])) if "label" in files else None
         label = _nice_label(raw_label) if raw_label else f"{prefix} {num}"
         grouped.setdefault(group, []).append(
