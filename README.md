@@ -30,7 +30,7 @@ sensor names, and live charts for all components.
   sudo dnf install lm_sensors python3-pip
 
 ### Install Python dependencies
-  pip3 install PySide6 pyqtgraph pynvml \
+  pip3 install PySide6 pyqtgraph nvidia-ml-py psutil \
     --break-system-packages
 
 ### Clone and run

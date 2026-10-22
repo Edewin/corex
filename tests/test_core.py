@@ -117,7 +117,8 @@ def test_storage_rates_mounts_lvm_and_nvme_temperature(fake):
                               "tmpfs /run tmpfs rw 0 0\n")
     fake.write("proc/diskstats", "259 0 nvme0n1 10 0 2048 0 10 0 4096 0 0 100 0 0 0 0\n")
 
-    src = StorageSource(fake.roots, statvfs=lambda m: (100 * 2**30, 25 * 2**30), resolve_dev=lambda p: p)
+    src = StorageSource(fake.roots, statvfs=lambda m: (100 * 2**30, 25 * 2**30), resolve_dev=lambda p: p,
+                        sandboxed=False)
     pool = HwmonPool(read_chips(fake.roots))
     (dev,) = src.sample(0.0, pool)
     assert dev.name == "Samsung SSD 980 PRO 1TB"

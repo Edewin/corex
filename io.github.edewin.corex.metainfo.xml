@@ -15,11 +15,12 @@
   <description>
     <p>CoreX is a lightweight hardware monitor for Linux that keeps you informed about your system's health at all times.</p>
     <ul>
-      <li>Monitors all sensors on your PC — CPU temperature, GPU temperature, fan speeds, voltages, and more</li>
-      <li>Displays real-time CPU and RAM usage with clear, readable graphs</li>
-      <li>Includes an always-on-top overlay widget — visible while gaming, working, or browsing, without switching windows</li>
-      <li>Minimal resource footprint — CoreX watches your system without slowing it down</li>
-      <li>Clean, native Linux interface built with PySide6 (Qt for Python)</li>
+      <li>Every sensor of your PC in one list: CPU and GPU temperatures, fan speeds, voltages, power, clocks, disks and network, each with its minimum and maximum</li>
+      <li>A dashboard with live charts per device, or charts only for the values you pick</li>
+      <li>An always-on-top widget with the values you choose, visible while gaming, working or browsing</li>
+      <li>Rename sensors, hide the ones you do not need; CoreX remembers your layout</li>
+      <li>Can start with your system, straight into the widget</li>
+      <li>Light on resources: it reads the kernel directly, no background services</li>
     </ul>
   </description>
 
@@ -56,12 +57,23 @@
   <url type="vcs-browser">https://github.com/Edewin/corex</url>
 
   <provides>
-    <binary>corex-run</binary>
+    <binary>corex</binary>
   </provides>
 
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="2.0.0" date="2026-10-22">
+      <description>
+        <p>A rewrite of CoreX.</p>
+        <ul>
+          <li>New sensor engine: accurate network and disk rates, NVIDIA, AMD and Intel GPUs, NVMe and drive temperatures</li>
+          <li>Choose how you see CoreX: List, List with widget, or Dashboard</li>
+          <li>Minimum and maximum for every sensor, rename and hide sensors</li>
+          <li>Start with system</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.1.0" date="2026-10-22"/>
     <release version="1.0.0" date="2026-03-31"/>
   </releases>

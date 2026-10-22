@@ -31,8 +31,11 @@ def _statvfs(path: str) -> tuple[int, int] | None:
 
 class StorageSource:
     def __init__(self, roots: Roots, statvfs: Callable[[str], tuple[int, int] | None] = _statvfs,
-                 resolve_dev: Callable[[str], str] = os.path.realpath):
+                 resolve_dev: Callable[[str], str] = os.path.realpath, sandboxed: bool | None = None):
         self.roots = roots
+        # inside Flatpak the mount table is the sandbox's (/usr, /app ...): the free space is
+        # right, the paths are not, so partitions are named by their label instead
+        self.sandboxed = os.path.exists("/.flatpak-info") if sandboxed is None else sandboxed
         self.rates = RateTracker()
         self.statvfs = statvfs
         self.resolve_dev = resolve_dev
@@ -61,8 +64,9 @@ class StorageSource:
             owners |= self._owner_disks(s, disks)
         return owners
 
-    def _mounts_by_disk(self, disks: list[str]) -> dict[str, list[str]]:
-        out: dict[str, list[str]] = {d: [] for d in disks}
+    def _mounts_by_disk(self, disks: list[str]) -> dict[str, list[tuple[str, str, str]]]:
+        """disk -> [(reading id suffix, label, path to statvfs)]"""
+        out: dict[str, list[tuple[str, str, str]]] = {d: [] for d in disks}
         seen_src: dict[str, str] = {}
         for line in (read_text(self.roots.p("mounts")) or "").splitlines():
             parts = line.split()
@@ -74,10 +78,22 @@ class StorageSource:
             if src in seen_src and len(seen_src[src]) <= len(mount):
                 continue
             seen_src[src] = mount
+        labels = self._fs_labels() if self.sandboxed else {}
         for src, mount in seen_src.items():
+            entry = (f":{src}", labels.get(src, src), mount) if self.sandboxed else (mount, mount, mount)
             for disk in self._owner_disks(src, disks):
-                out[disk].append(mount)
+                out[disk].append(entry)
         return {d: sorted(m) for d, m in out.items()}
+
+    def _fs_labels(self) -> dict[str, str]:
+        """partition -> filesystem label, from /dev/disk/by-label"""
+        base = "/dev/disk/by-label"
+        out = {}
+        for name in list_dir(base):
+            # udev escapes unsafe characters, e.g. a space as \x20
+            label = re.sub(r"\\x([0-9a-fA-F]{2})", lambda m: chr(int(m.group(1), 16)), name)
+            out[os.path.basename(self.resolve_dev(os.path.join(base, name)))] = label
+        return out
 
     # -- sampling --------------------------------------------------------
     def sample(self, now: float, pool: HwmonPool) -> list[Device]:
@@ -102,12 +118,12 @@ class StorageSource:
                 )))
 
             space = []
-            for mount in mounts.get(disk, []):
+            for key, label, mount in mounts.get(disk, []):
                 tf = self.statvfs(mount)
                 if tf and tf[0] > 0:
                     total, free = tf
-                    space.append(Reading(f"disk/{disk}/space{mount}", mount, Kind.LOAD, 100.0 * (total - free) / total))
-                    space.append(Reading(f"disk/{disk}/free{mount}", f"{mount} free", Kind.DATA, free))
+                    space.append(Reading(f"disk/{disk}/space{key}", label, Kind.LOAD, 100.0 * (total - free) / total))
+                    space.append(Reading(f"disk/{disk}/free{key}", f"{label} free", Kind.DATA, free))
             if space:
                 groups.append(Group("Space", tuple(space)))
 
