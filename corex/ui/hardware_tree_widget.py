@@ -184,6 +184,9 @@ class HardwareTreeWidget(QTreeWidget):
         self._comp_items.clear()
 
         for component in tree.components:
+            if not any(group.sensors for group in component.groups):
+                continue
+
             comp_item = self._make_component_item(component)
             self.addTopLevelItem(comp_item)
             self._comp_items[component.name] = comp_item
