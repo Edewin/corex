@@ -8,9 +8,9 @@ Shown on first run when generic sensors (temp1, temp2, etc.) are detected.
 from __future__ import annotations
 
 from typing import Dict, List, Tuple, Optional
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
     QHBoxLayout,

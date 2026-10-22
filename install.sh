@@ -12,9 +12,9 @@ elif command -v pacman &> /dev/null; then
 fi
 
 # Install Python deps
-pip3 install PyQt6 pyqtgraph pynvml \
+pip3 install PySide6 pyqtgraph pynvml \
     --break-system-packages 2>/dev/null || \
-pip3 install PyQt6 pyqtgraph pynvml
+pip3 install PySide6 pyqtgraph pynvml
 
 # sensors-detect if not already done
 if ! sensors &>/dev/null; then

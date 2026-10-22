@@ -7,9 +7,9 @@ import subprocess
 import time
 from typing import Dict, List, Optional, Any
 
-from PyQt6.QtCore import QThread, pyqtSignal
-from PyQt6.QtGui import QColor, QPalette
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import QThread, Signal
+from PySide6.QtGui import QColor, QPalette
+from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QMessageBox,
@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QSystemTrayIcon,
 )
 
+from corex import __version__
 from corex.models import HardwareTree, HardwareComponent
 from corex.sensors.cpu import build_cpu_component, get_cpu_usage, get_cpu_frequencies
 from corex.sensors.lm_reader import get_all_lm_components
@@ -38,9 +39,9 @@ from corex.ui.discovery_dialog import DiscoveryDialog
 class SensorPoller(QThread):
     """Background thread that polls hardware sensors every second."""
 
-    data_ready       = pyqtSignal(object)   # HardwareTree
-    discovery_needed = pyqtSignal(object)   # List[HardwareComponent]
-    status_update    = pyqtSignal(bool, bool)  # lm_ok, nvml_ok
+    data_ready       = Signal(object)   # HardwareTree
+    discovery_needed = Signal(object)   # List[HardwareComponent]
+    status_update    = Signal(bool, bool)  # lm_ok, nvml_ok
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -242,7 +243,7 @@ class CoreXApp:
         app.setPalette(palette)
 
         # ── 2. Load application icon ──────────────────────────────────
-        from PyQt6.QtGui import QIcon
+        from PySide6.QtGui import QIcon
         import os
 
         icon_path = os.path.join(
@@ -482,7 +483,7 @@ def main() -> None:
     if app is None:
         app = QApplication(sys.argv)
     app.setApplicationName("CoreX")
-    app.setApplicationVersion("0.1.0")
+    app.setApplicationVersion(__version__)
     app.setQuitOnLastWindowClosed(False)   # CRITICAL: keep alive when window closes
 
     # ── 4. Check system tray ──────────────────────────────────────────

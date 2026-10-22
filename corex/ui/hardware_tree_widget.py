@@ -13,9 +13,9 @@ from __future__ import annotations
 
 from typing import Dict
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QFontDatabase, QBrush
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QBrush
+from PySide6.QtWidgets import (
     QApplication,
     QTreeWidget,
     QTreeWidgetItem,
@@ -105,7 +105,7 @@ class HardwareTreeWidget(QTreeWidget):
         Emitted when the user selects "Add to widget" from the right-click menu.
     """
 
-    add_to_widget = pyqtSignal(str)
+    add_to_widget = Signal(str)
 
     # Map sensor_id → QTreeWidgetItem (Level 3 only)
     _items: Dict[str, QTreeWidgetItem]

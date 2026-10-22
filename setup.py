@@ -1,8 +1,13 @@
+import re
+from pathlib import Path
+
 from setuptools import setup, find_packages
+
+VERSION = re.search(r'__version__ = "([^"]+)"', Path("corex/__init__.py").read_text()).group(1)
 
 setup(
     name='corex',
-    version='1.0.0',
+    version=VERSION,
     packages=find_packages(),
     package_data={
         'corex': ['assets/**/*'],

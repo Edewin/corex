@@ -11,9 +11,9 @@ import time
 from collections import defaultdict, deque
 from typing import Optional
 
+from PySide6.QtCore import Qt, QTimer, Signal
 import pyqtgraph as pg
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QApplication,
     QGridLayout,
     QHBoxLayout,
@@ -119,7 +119,7 @@ class CoreXDashboard(QMainWindow):
     """Main dashboard window for CoreX hardware monitoring."""
     
     # Signals
-    show_widget = pyqtSignal()  # Emitted when "Show Widget" button is clicked
+    show_widget = Signal()  # Emitted when "Show Widget" button is clicked
     
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)

@@ -14,9 +14,9 @@ import socket
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from PyQt6.QtCore import Qt, pyqtSignal, QPoint
-from PyQt6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPainterPath, QPen, QBrush
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, Signal, QPoint
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPainterPath, QPen, QBrush
+from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
     QLabel,
@@ -110,8 +110,8 @@ class CoreXWidget(QWidget):
         Emitted when the user selects "Quit CoreX" from the context menu.
     """
 
-    open_dashboard = pyqtSignal()
-    quit_app       = pyqtSignal()
+    open_dashboard = Signal()
+    quit_app       = Signal()
 
     # Internal state
     _drag_offset: Optional[QPoint]
