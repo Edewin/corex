@@ -43,6 +43,7 @@ class SensorTree(QTreeWidget):
         for c in (self.VALUE, self.MIN, self.MAX):
             h.setSectionResizeMode(c, QHeaderView.ResizeMode.Interactive)
             self.setColumnWidth(c, 130)
+            self.headerItem().setTextAlignment(c, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         for c in (self.CHART, self.WIDGET):
             h.setSectionResizeMode(c, QHeaderView.ResizeMode.Fixed)
             self.setColumnWidth(c, 64)

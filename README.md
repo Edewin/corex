@@ -2,57 +2,58 @@
 
 > "Your machine's core, exposed."
 
-A hardware monitor for Linux with an always-on-top
-draggable widget, HWiNFO-style sensor tree with real
-sensor names, and live charts for all components.
+A hardware monitor for Linux: every sensor in one list with current, minimum
+and maximum values, live charts when you want them, and a small always-on-top
+widget with the values you pick.
+
+![CoreX dashboard](corex/assets/screenshots/dashboard.png)
 
 ## Features
-- Always-on-top draggable widget with live metrics
-- HWiNFO-style sensor tree (CPU, GPU, RAM, Disk, Network)
-- Real sensor names — not "temp1", "temp2"
-- Live charts for CPU, GPU, Memory, Network, Storage
-- AMD and Nvidia GPU support
-- Automatic sensor identification wizard
-- Dark theme throughout
+- **Three ways to see it** — chosen at first start, switched any time:
+  - **List**: every sensor with value, min and max; charts on demand
+  - **List + widget**: the same list plus the floating widget
+  - **Dashboard**: devices on the left, live charts per device, full list underneath
+- **Floating widget** — always on top, draggable, adjustable opacity; tick any sensor to add it
+- **Real names** — CPU, GPU, disks, network, batteries and board sensors named
+  for what they are, not `temp1`; rename any of them from the list
+- **Your view is remembered** — hidden sensors, folded groups, charts and column widths
+- **Start with the system** — one tick in the ☰ menu
+- Intel, AMD and NVIDIA processors and graphics cards, NVMe / SATA drives, laptops and desktops
+- Reads the kernel directly (`/sys`, `/proc`) — no extra tools to configure
 
-## Requirements
-- Linux with X11 or XWayland
-- Python 3.10+
-- lm-sensors
+## Screenshots
+
+### List with charts on demand
+![CoreX list view](corex/assets/screenshots/list.png)
+
+### Device page
+![CoreX device page](corex/assets/screenshots/device.png)
+
+### Floating widget
+![CoreX widget](corex/assets/screenshots/widget.png)
+
+### First start
+![CoreX first start](corex/assets/screenshots/firstrun.png)
 
 ## Installation
 
-### Ubuntu / Zorin OS / Linux Mint
-  sudo apt install lm-sensors libxcb-cursor0 python3-pip
-  sudo sensors-detect --auto
+### Flathub
+  flatpak install flathub io.github.edewin.corex
 
-### Fedora / RHEL
-  sudo dnf install lm_sensors python3-pip
+### From source
+Requirements: Linux with X11 or XWayland, Python 3.10+.
 
-### Install Python dependencies
-  pip3 install PySide6 pyqtgraph nvidia-ml-py psutil \
-    --break-system-packages
-
-### Clone and run
+  sudo apt install libxcb-cursor0 python3-pip      # Ubuntu / Zorin OS / Linux Mint
   git clone https://github.com/Edewin/corex.git
   cd corex
-  PYTHONPATH=. python3 corex/main.py
+  pip3 install -r requirements.txt --break-system-packages
+  python3 -m corex
+
+On desktop boards some temperature and fan chips need their kernel driver
+loaded first; `sudo sensors-detect --auto` (package `lm-sensors`) does that once.
 
 ## Author
 Eduard Soltuzu
 
 ## License
 MIT
-## Screenshots
-
-### Widget over a game
-![CoreX widget over SuperTuxKart](corex/assets/screenshots/corex_widget.gif)
-
-### Dashboard with live charts
-![CoreX dashboard](corex/assets/screenshots/dashboard.gif)
-
-### Hardware Tree — HWiNFO style
-![CoreX hardware tree](corex/assets/screenshots/corex_dashboard_tree.png)
-
-### System tray
-![CoreX system tray](corex/assets/screenshots/corex_systray.png)
