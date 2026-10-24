@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 
 from corex.core.model import Kind, Snapshot
@@ -54,16 +55,22 @@ class AlertWatcher:
 
 
 def notify(title: str, body: str, tray=None) -> bool:
-    """Desktop notification over D-Bus; the tray balloon when D-Bus cannot be reached."""
+    """Desktop notification over D-Bus (the notification portal in a sandbox); the tray balloon when
+    D-Bus cannot be reached."""
     try:
         from PySide6.QtDBus import QDBusConnection, QDBusInterface
         bus = QDBusConnection.sessionBus()
         if bus.isConnected():
-            iface = QDBusInterface("org.freedesktop.Notifications", "/org/freedesktop/Notifications",
-                                   "org.freedesktop.Notifications", bus)
+            if os.path.exists("/.flatpak-info"):
+                iface = QDBusInterface("org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
+                                       "org.freedesktop.portal.Notification", bus)
+                args = ("AddNotification", "corex-alert", {"title": title, "body": body})
+            else:
+                iface = QDBusInterface("org.freedesktop.Notifications", "/org/freedesktop/Notifications",
+                                       "org.freedesktop.Notifications", bus)
+                args = ("Notify", "CoreX", 0, "io.github.edewin.corex", title, body, [], {}, 8000)
             if iface.isValid():
-                reply = iface.call("Notify", "CoreX", 0, "io.github.edewin.corex", title, body,
-                                   [], {}, 8000)
+                reply = iface.call(*args)
                 if not reply.errorName():
                     return True
     except Exception:            # no QtDBus in this build: fall back to the tray
