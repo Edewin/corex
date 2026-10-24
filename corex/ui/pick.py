@@ -102,8 +102,18 @@ def summary(device: Device) -> str:
     return "  ·  ".join(parts)
 
 
-def overview_tiles(snap: Snapshot) -> list[tuple[str, list[str]]]:
-    """(device id, reading ids) for the Overview page: the first tile of every device."""
+def overview_tiles(snap: Snapshot, custom: list[list[str]] | None = None) -> list[tuple[str, list[str]]]:
+    """
+    (device id, reading ids) for the Overview page: the user's own list, or
+    the first tile of every device; charts of devices that are gone are skipped.
+    """
+    if custom is not None:
+        out = []
+        for ids in custom:
+            dev = next((d for d in snap.devices if ids and d.reading(ids[0])), None)
+            if dev:
+                out.append((dev.id, [i for i in ids if dev.reading(i)]))
+        return out
     out = []
     for d in snap.devices:
         t = tiles(d)
@@ -111,6 +121,42 @@ def overview_tiles(snap: Snapshot) -> list[tuple[str, list[str]]]:
             out += [(d.id, ids) for ids in t[:2]]
         elif t:
             out.append((d.id, t[0]))
+    return out
+
+
+def device_label(device: Device) -> str:
+    """Device name, with the drive's own name where several drives look alike."""
+    if device.kind == DeviceKind.STORAGE and device.detail:
+        return f"{device.name} ({device.detail.split(' · ')[-1]})"
+    return device.name
+
+
+def tile_name(device: Device, ids: list[str]) -> str:
+    """Device · group · value, to tell the charts apart in a list."""
+    name = device_label(device)
+    if len(ids) > 1:
+        what = "Traffic" if ids[0].endswith(("/down", "/up")) else "Read / write"
+        return f"{name} · {what}"
+    for g in device.groups:
+        for r in g.readings:
+            if r.id == ids[0]:
+                return f"{name} · {g.name} · {r.label}"
+    return name
+
+
+def overview_candidates(snap: Snapshot) -> list[tuple[str, list[str], str]]:
+    """Every chart the Overview can show: the device tiles first, then each value on its own."""
+    out = []
+    for d in snap.devices:
+        seen = set()
+        for ids in tiles(d):
+            out.append((d.id, ids, tile_name(d, ids)))
+            if len(ids) == 1:
+                seen.add(ids[0])
+        for g in d.groups:
+            for r in g.readings:
+                if r.kind != Kind.INFO and r.id not in seen:
+                    out.append((d.id, [r.id], f"{device_label(d)} · {g.name} · {r.label}"))
     return out
 
 

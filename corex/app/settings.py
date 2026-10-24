@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 INTERVALS_S = (0.5, 1.0, 2.0, 5.0)
-VIEW_MODES = ("list", "dashboard")
+VIEW_MODES = ("list", "hybrid", "dashboard")
 
 
 def config_dir() -> Path:
@@ -26,7 +26,8 @@ class Settings:
     widget_opacity: float = 0.92                                  # before 2.2: became widget_style background
     widget_style: dict = field(default_factory=dict)              # look and layout, see ui/overlay.py
     last_page: str = "overview"
-    view_mode: str | None = None                                  # "list" / "dashboard"; None = ask on first run
+    view_mode: str | None = None                                  # one of VIEW_MODES; None = ask on first run
+    overview: list[list[str]] | None = None                       # charts on the Overview; None = automatic
     hidden: list[str] = field(default_factory=list)               # reading ids hidden from the tables
     show_hidden: bool = False
     collapsed: list[str] = field(default_factory=list)            # folded device / group rows

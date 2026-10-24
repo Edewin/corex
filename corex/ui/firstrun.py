@@ -13,6 +13,8 @@ CHOICES = (
                             "Charts only when you click for them.", "list"),
     ("list", True, "List + widget", "The same list, plus a small always-on-top widget "
                                     "with the values you pick.", "widget"),
+    ("hybrid", True, "Hybrid", "The full list on the left, live charts on the right: of the device "
+                               "you click, or an overview of all of them.", "hybrid"),
     ("dashboard", True, "Dashboard", "Devices on the left, live charts for each one, "
                                      "the full list underneath and the widget.", "overview"),
 )
@@ -22,14 +24,14 @@ class FirstRunDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Welcome to CoreX")
-        self.choice = CHOICES[2]
+        self.choice = CHOICES[-1]
         lay = QVBoxLayout(self)
         lay.setContentsMargins(28, 24, 28, 24)
         lay.setSpacing(16)
         title = QLabel("How do you want to see CoreX?")
         title.setObjectName("h1")
         lay.addWidget(title)
-        hint = QLabel("You can switch any time from the List / Dashboard buttons and the Widget button.")
+        hint = QLabel("You can switch any time from the List / Hybrid / Dashboard buttons and the Widget button.")
         hint.setObjectName("muted")
         lay.addWidget(hint)
         row = QHBoxLayout()
@@ -43,7 +45,7 @@ class FirstRunDialog(QDialog):
         b = QPushButton()
         b.setObjectName("choice")
         b.setCursor(Qt.CursorShape.PointingHandCursor)
-        b.setMinimumSize(230, 190)
+        b.setMinimumSize(210, 190)
         b.setStyleSheet(f"QPushButton#choice {{ background: {theme.PANEL}; border: 1px solid {theme.BORDER};"
                         f" border-radius: 10px; text-align: left; }}"
                         f"QPushButton#choice:hover {{ border-color: {theme.ACCENT}; background: {theme.PANEL_HI}; }}")

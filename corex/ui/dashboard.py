@@ -1,10 +1,10 @@
-"""Main window: List view (one sensor tree) or Dashboard (sidebar, overview, device pages)."""
+"""Main window: List (one sensor tree), Hybrid (tree + charts) or Dashboard (sidebar, overview, device pages)."""
 
 from __future__ import annotations
 
 import time
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -29,10 +29,10 @@ from corex.app.poller import History
 from corex.app.settings import INTERVALS_S, Settings
 from corex.core.model import Kind, Snapshot
 from corex.ui import pick, theme
-from corex.ui.sensortree import SensorTree
+from corex.ui.overviewedit import OverviewDialog
+from corex.ui.sensortree import OVERVIEW, SensorTree
 from corex.ui.tiles import SidebarEntry, Tile
 
-OVERVIEW = "overview"
 _ID = Qt.ItemDataRole.UserRole
 
 
@@ -53,10 +53,15 @@ def _tree_refresh(tree: SensorTree, devices, widget_ids: set[str], prefs: Settin
 
 # ---------------------------------------------------------------------------
 class DevicePage(QWidget):
-    def __init__(self, parent=None):
+    """Header and charts of one device; with table=True also its sensors underneath, else a way back."""
+
+    back = Signal()
+
+    def __init__(self, table: bool = True, parent=None):
         super().__init__(parent)
         self.device_id: str | None = None
         self.tile_ids: list = []
+        self._columns = 0
         self.tiles: list[Tile] = []
         lay = QVBoxLayout(self)
         lay.setContentsMargins(24, 18, 24, 18)
@@ -74,19 +79,33 @@ class DevicePage(QWidget):
         col.addWidget(self.name)
         col.addWidget(self.detail)
         head.addLayout(col, 1)
+        if not table:
+            back = QToolButton()
+            back.setText("Overview")
+            back.setIcon(theme.icon("overview", theme.TEXT, 16))
+            back.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            back.setToolTip("Back to the charts of every device (Esc in the list)")
+            back.clicked.connect(self.back)
+            head.addWidget(back, 0, Qt.AlignmentFlag.AlignTop)
         lay.addLayout(head)
         self.tiles_host = QWidget()
         self.tiles_host.setLayout(QGridLayout())
         lay.addWidget(self.tiles_host)
-        self.table = SensorTree(all_devices=False, charts=False)
-        lay.addWidget(self.table, 1)
+        self.table = SensorTree(all_devices=False, charts=False) if table else None
+        if self.table:
+            lay.addWidget(self.table, 1)
+        else:
+            lay.addStretch(1)
 
     def show_device(self, device_id: str) -> None:
         self.device_id = device_id
         self.tile_ids = []
-        self.table.invalidate()
+        if self.table:
+            self.table.invalidate()
 
-    def refresh(self, snap: Snapshot, history: History, widget_ids: set[str], prefs: Settings) -> None:
+    def refresh(self, snap: Snapshot, history: History, widget_ids: set[str], prefs: Settings,
+                extra: str | None = None) -> None:
+        """extra: one more value to chart (the row picked in the Hybrid list)."""
         dev = snap.device(self.device_id) if self.device_id else None
         if dev is None:
             return
@@ -94,44 +113,136 @@ class DevicePage(QWidget):
         self.name.setText(dev.name)
         self.detail.setText(dev.detail)
         wanted = pick.tiles(dev)
-        if wanted != self.tile_ids:
-            self.tile_ids = wanted
+        r = dev.reading(extra) if extra else None
+        if r is not None and r.kind != Kind.INFO and not any(extra in ids for ids in wanted):
+            wanted = wanted + [[extra]]
+        columns = len(wanted) if self.table else min(len(wanted), self.width() // 300)
+        columns = max(1, columns)
+        if wanted != self.tile_ids or columns != self._columns:
+            self.tile_ids, self._columns = wanted, columns
             QWidget().setLayout(self.tiles_host.layout())      # re-parent the old layout so it is deleted
-            self.tiles = [Tile(dev.id, ids) for ids in wanted]
-            self.tiles_host.setLayout(_tile_grid(self.tiles, max(1, len(self.tiles))))
+            self.tiles = [Tile(dev.id, ids, clickable=False) for ids in wanted]
+            self.tiles_host.setLayout(_tile_grid(self.tiles, columns))
             self.tiles_host.setVisible(bool(self.tiles))
         for t in self.tiles:
             t.refresh(snap, history)
-        _tree_refresh(self.table, [dev], widget_ids, prefs)
+        if self.table:
+            _tree_refresh(self.table, [dev], widget_ids, prefs)
 
 
 class OverviewPage(QScrollArea):
+    """The charts of every device; the user picks and orders them (prefs.overview)."""
+
     open_device = Signal(str)
+    customize = Signal()
+    removed = Signal(str)            # first reading id of the chart taken off
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWidgetResizable(True)
-        self._ids: list = []
+        self._ids: list | None = None
         self._columns = 0
         self.tiles: list[Tile] = []
         self.setWidget(QWidget())
 
-    def refresh(self, snap: Snapshot, history: History) -> None:
-        wanted = pick.overview_tiles(snap)
+    def refresh(self, snap: Snapshot, history: History, custom: list[list[str]] | None) -> None:
+        wanted = pick.overview_tiles(snap, custom)
         columns = max(1, min(4, self.viewport().width() // 320))
         if wanted != self._ids or columns != self._columns:
             self._ids, self._columns = wanted, columns
             host = QWidget()
             outer = QVBoxLayout(host)
-            outer.setContentsMargins(24, 18, 24, 18)
-            self.tiles = [Tile(dev_id, ids, show_device=True) for dev_id, ids in wanted]
+            outer.setContentsMargins(24, 12, 24, 18)
+            outer.setSpacing(10)
+            head = QHBoxLayout()
+            hint = QLabel("Click a chart to open its device")
+            hint.setObjectName("muted")
+            head.addWidget(hint, 1)
+            edit = QToolButton()
+            edit.setText("Customize…")
+            edit.setIcon(theme.icon("edit", theme.TEXT, 16))
+            edit.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            edit.setToolTip("Choose the charts of the overview and their order")
+            edit.clicked.connect(self.customize)
+            head.addWidget(edit)
+            outer.addLayout(head)
+            self.tiles = [Tile(dev_id, ids, show_device=True, closable=True, clickable=True,
+                               close_tip="Remove from the overview") for dev_id, ids in wanted]
             for t in self.tiles:
                 t.clicked.connect(self.open_device)
-            outer.addLayout(_tile_grid(self.tiles, columns))
+                t.closed.connect(self.removed)
+            if self.tiles:
+                outer.addLayout(_tile_grid(self.tiles, columns))
+            else:
+                empty = QLabel("The overview is empty.\nUse Customize… to choose its charts, or right-click "
+                               "a sensor in the list › Add to the overview.")
+                empty.setObjectName("muted")
+                empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                outer.addSpacing(60)
+                outer.addWidget(empty)
             outer.addStretch(1)
             self.setWidget(host)
         for t in self.tiles:
             t.refresh(snap, history)
+
+
+class HybridPage(QSplitter):
+    """Every sensor on the left; on the right the charts of the device picked there, or the overview."""
+
+    device_selected = Signal(str)    # device id or OVERVIEW
+    picked = Signal()                # another row of the list: its chart joins the device's
+    split_changed = Signal(list)
+
+    def __init__(self, parent=None):
+        super().__init__(Qt.Orientation.Horizontal, parent)
+        self.setChildrenCollapsible(False)
+        self.page = OVERVIEW
+        self.tree = SensorTree(all_devices=True, charts=False, pick_device=True)
+        self.tree.setMinimumWidth(420)
+        self.tree.device_selected.connect(self.device_selected)
+        self.tree.currentItemChanged.connect(lambda *_: None if self.tree._updating else self.picked.emit())
+        self.addWidget(self.tree)
+        self.right = QStackedWidget()
+        self.overview = OverviewPage()
+        self.overview.open_device.connect(self.device_selected)
+        self.device = DevicePage(table=False)
+        self.device.back.connect(lambda: self.device_selected.emit(OVERVIEW))
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(self.device)
+        self.device_scroll = scroll
+        self.right.addWidget(self.overview)
+        self.right.addWidget(scroll)
+        self.right.setMinimumWidth(300)
+        self.addWidget(self.right)
+        self._split_set = False
+        self._split_timer = QTimer(self, singleShot=True, interval=400)
+        self._split_timer.timeout.connect(lambda: self.split_changed.emit(self.sizes()))
+        self.splitterMoved.connect(lambda *_: self._split_timer.start())
+
+    def set_split(self, sizes: list[int] | None) -> None:
+        if sizes and len(sizes) == 2:
+            self.setSizes(sizes)
+            self._split_set = True
+
+    def show_page(self, page: str) -> None:
+        if page != self.page:
+            self.page = page
+            if page != OVERVIEW:
+                self.device.show_device(page)
+        self.tree.select_device(page)
+        self.right.setCurrentWidget(self.overview if page == OVERVIEW else self.device_scroll)
+
+    def refresh(self, snap: Snapshot, history: History, widget_ids: set[str], prefs: Settings) -> None:
+        if not self._split_set and self.width() > 900:
+            self.setSizes([self.width() // 2, self.width() - self.width() // 2])
+            self._split_set = True
+        _tree_refresh(self.tree, snap.devices, widget_ids, prefs)
+        self.tree.select_device(self.page)          # a rebuilt tree forgets its current row
+        if self.page != OVERVIEW and snap.device(self.page):
+            self.device.refresh(snap, history, widget_ids, prefs, self.tree.current_reading())
+        else:
+            self.overview.refresh(snap, history, prefs.overview)
 
 
 class ListPage(QSplitter):
@@ -242,7 +353,16 @@ class MainWindow(QMainWindow):
         self.device_page = DevicePage()
         self.list_page = ListPage()
         self.list_page.chart_closed.connect(lambda rid: self._toggle_pref("charts", rid, False))
-        for tree, key in ((self.device_page.table, "device"), (self.list_page.tree, "list")):
+        self.hybrid = HybridPage()
+        self.hybrid.set_split(prefs.columns.get("hybrid_split"))
+        self.hybrid.device_selected.connect(self.select)
+        self.hybrid.picked.connect(self._refresh_now)
+        self.hybrid.split_changed.connect(lambda s: self._set_widths("hybrid_split", s))
+        for ov in (self.overview, self.hybrid.overview):
+            ov.customize.connect(self.customize_overview)
+            ov.removed.connect(lambda rid: self._overview_toggle(rid, False))
+        for tree, key in ((self.device_page.table, "device"), (self.list_page.tree, "list"),
+                          (self.hybrid.tree, "hybrid")):
             tree.set_widths(prefs.columns.get(key))
             tree.renamed.connect(self.renamed)
             tree.widget_toggled.connect(self.widget_toggled)
@@ -252,7 +372,8 @@ class MainWindow(QMainWindow):
             tree.widths_changed.connect(lambda w, key=key: self._set_widths(key, w))
             tree.history_requested.connect(self.history_requested)
             tree.alert_requested.connect(self.alert_requested)
-        for page in (self.overview, self.device_page, self.list_page):
+            tree.overview_toggled.connect(self._overview_toggle)
+        for page in (self.overview, self.device_page, self.list_page, self.hybrid):
             self.stack.addWidget(page)
         mv.addWidget(self.stack, 1)
         h.addWidget(main, 1)
@@ -282,7 +403,8 @@ class MainWindow(QMainWindow):
         self.view_buttons: dict[str, QToolButton] = {}
         group = QButtonGroup(bar)
         for mode, text, icon_name, key in (("list", "List", "list", "Ctrl+1"),
-                                           ("dashboard", "Dashboard", "overview", "Ctrl+2")):
+                                           ("hybrid", "Hybrid", "hybrid", "Ctrl+2"),
+                                           ("dashboard", "Dashboard", "overview", "Ctrl+3")):
             b = QToolButton()
             b.setText(text)
             b.setIcon(theme.icon(icon_name, theme.TEXT, 16))
@@ -290,6 +412,8 @@ class MainWindow(QMainWindow):
             b.setCheckable(True)
             b.setShortcut(key)
             b.setToolTip({"list": "All sensors in one list, charts only when you ask for them",
+                          "hybrid": "All sensors on the left, charts on the right: of the device you click, "
+                                    "or the overview",
                           "dashboard": "Devices on the left, charts for each one"}[mode] + f" ({key})")
             b.clicked.connect(lambda _=False, m=mode: self._choose_view(m))
             group.addButton(b)
@@ -360,6 +484,7 @@ class MainWindow(QMainWindow):
         edit_widget.triggered.connect(self.edit_widget_requested)
         menu.addAction(edit_widget)
         self.addAction(edit_widget)
+        menu.addAction(theme.icon("overview", theme.TEXT, 16), "Customize the overview…", self.customize_overview)
         menu.addSeparator()
         menu.addAction("About CoreX", self.about_requested.emit)
         quit_action = QAction("Quit CoreX", self)
@@ -393,6 +518,11 @@ class MainWindow(QMainWindow):
         if self.mode == "list":
             self.stack.setCurrentWidget(self.list_page)
             self.page_title.setText("All sensors")
+        elif self.mode == "hybrid":
+            page = self._page if self._page in self._entries else OVERVIEW
+            self.hybrid.show_page(page)
+            self.stack.setCurrentWidget(self.hybrid)
+            self.page_title.setText("Overview" if page == OVERVIEW else self._entries[page].name.text())
         elif self._page == OVERVIEW or self._page not in self._entries:
             self.stack.setCurrentWidget(self.overview)
             self.page_title.setText("Overview")
@@ -426,6 +556,33 @@ class MainWindow(QMainWindow):
             values.remove(value)
         self.prefs_changed.emit()
         if refresh:
+            self._refresh_now()
+
+    def _overview_specs(self) -> list[list[str]]:
+        if self.prefs.overview is not None:
+            return [list(ids) for ids in self.prefs.overview]
+        snap = self.history.latest
+        return [ids for _, ids in pick.overview_tiles(snap)] if snap else []
+
+    def _overview_toggle(self, rid: str, on: bool) -> None:
+        specs = self._overview_specs()
+        if on and not any(rid in ids for ids in specs):
+            specs.append([rid])
+        elif not on:
+            specs = [ids for ids in specs if rid not in ids]
+        self.prefs.overview = specs
+        self.prefs_changed.emit()
+        self.statusBar().showMessage("Added to the overview" if on else
+                                     "Removed from the overview · Customize… brings it back", 4000)
+        self._refresh_now()
+
+    def customize_overview(self) -> None:
+        if not self.history.latest:
+            return
+        dlg = OverviewDialog(self.history.latest, self.prefs.overview, self)
+        if dlg.exec():
+            self.prefs.overview = dlg.chosen
+            self.prefs_changed.emit()
             self._refresh_now()
 
     def _set_widths(self, key: str, widths: list[int]) -> None:
@@ -485,12 +642,17 @@ class MainWindow(QMainWindow):
 
     def _refresh_page(self, snap: Snapshot) -> None:
         alert_ids = set(self.prefs.alerts)
-        self.list_page.tree.alert_ids = self.device_page.table.alert_ids = alert_ids
+        on_overview = {i for _, ids in pick.overview_tiles(snap, self.prefs.overview) for i in ids}
+        for tree in (self.list_page.tree, self.device_page.table, self.hybrid.tree):
+            tree.alert_ids = alert_ids
+            tree.overview_ids = on_overview
         page = self.stack.currentWidget()
         if page is self.list_page:
             self.list_page.refresh(snap, self.history, self.widget_ids, self.prefs)
+        elif page is self.hybrid:
+            self.hybrid.refresh(snap, self.history, self.widget_ids, self.prefs)
         elif page is self.overview:
-            self.overview.refresh(snap, self.history)
+            self.overview.refresh(snap, self.history, self.prefs.overview)
         else:
             self.device_page.refresh(snap, self.history, self.widget_ids, self.prefs)
 

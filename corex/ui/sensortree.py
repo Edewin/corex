@@ -13,6 +13,7 @@ from corex.ui import theme
 _ID = Qt.ItemDataRole.UserRole            # reading id on reading rows
 _KEY = Qt.ItemDataRole.UserRole + 1       # collapse key on device / group rows
 _BELL = Qt.ItemDataRole.UserRole + 2      # reading row shows the alert bell
+OVERVIEW = "overview"                     # key of the Overview row (Hybrid view)
 
 
 def group_key(device_id: str, group: str) -> str:
@@ -28,13 +29,17 @@ class SensorTree(QTreeWidget):
     widths_changed = Signal(list)         # widths of Value, Min, Max
     history_requested = Signal(str)
     alert_requested = Signal(str)
+    overview_toggled = Signal(str, bool)  # reading id, on the Overview
+    device_selected = Signal(str)         # device id or OVERVIEW (pick_device trees only)
 
     COLS = ("Sensor", "Value", "Min", "Max", "Chart", "Widget")
     VALUE, MIN, MAX, CHART, WIDGET = 1, 2, 3, 4, 5
 
-    def __init__(self, all_devices: bool, charts: bool, parent=None):
+    def __init__(self, all_devices: bool, charts: bool, pick_device: bool = False, parent=None):
+        """pick_device: an Overview row on top, and clicking a row picks its device."""
         super().__init__(parent)
         self.all_devices = all_devices
+        self.pick_device = pick_device
         self.setColumnCount(len(self.COLS))
         self.setHeaderLabels(self.COLS)
         self.setAlternatingRowColors(True)
@@ -60,6 +65,7 @@ class SensorTree(QTreeWidget):
         self.itemClicked.connect(self._clicked)
         self.itemExpanded.connect(lambda it: self._expanded(it, False))
         self.itemCollapsed.connect(lambda it: self._expanded(it, True))
+        self.currentItemChanged.connect(self._current)
         self._width_timer = QTimer(self, singleShot=True, interval=400)
         self._width_timer.timeout.connect(
             lambda: self.widths_changed.emit([self.columnWidth(c) for c in (self.VALUE, self.MIN, self.MAX)]))
@@ -67,6 +73,7 @@ class SensorTree(QTreeWidget):
 
         self._items: dict[str, QTreeWidgetItem] = {}
         self.alert_ids: set[str] = set()      # readings with an alert set
+        self.overview_ids: set[str] | None = None  # readings on the Overview; None = no menu entry
         self._signature: tuple = ()
         self._updating = False
         self._mono = theme.mono_font(10)
@@ -131,6 +138,15 @@ class SensorTree(QTreeWidget):
         self._items.clear()
         bold = self.font()
         bold.setBold(True)
+        selectable = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+        if self.pick_device:
+            top = QTreeWidgetItem(self, ["Overview   ·   all devices at a glance"])
+            top.setFirstColumnSpanned(True)
+            top.setIcon(0, theme.icon("overview", theme.ACCENT, 18))
+            top.setFont(0, bold)
+            top.setFlags(selectable)
+            top.setData(0, _KEY, OVERVIEW)
+            top.setToolTip(0, "Charts of every device · Esc comes back here")
         for d in devices:
             groups = [(g, rs) for g, rs in visible[d.id] if rs]
             if not groups:
@@ -141,7 +157,7 @@ class SensorTree(QTreeWidget):
                 top.setFirstColumnSpanned(True)
                 top.setIcon(0, theme.icon(d.kind, theme.ACCENT, 18))
                 top.setFont(0, bold)
-                top.setFlags(Qt.ItemFlag.ItemIsEnabled)
+                top.setFlags(selectable if self.pick_device else Qt.ItemFlag.ItemIsEnabled)
                 top.setData(0, _KEY, d.id)
                 parent = top
             for gname, readings in groups:
@@ -151,7 +167,7 @@ class SensorTree(QTreeWidget):
                 g.setIcon(0, theme.icon(kind, theme.KIND_COLORS.get(kind, theme.MUTED), 16))
                 g.setForeground(0, theme.qcolor(theme.MUTED))
                 g.setFont(0, bold)
-                g.setFlags(Qt.ItemFlag.ItemIsEnabled)
+                g.setFlags(selectable if self.pick_device else Qt.ItemFlag.ItemIsEnabled)
                 g.setData(0, _KEY, group_key(d.id, gname))
                 for r in readings:
                     self._items[r.id] = self._reading_item(g, r, r.id in hidden)
@@ -212,6 +228,40 @@ class SensorTree(QTreeWidget):
         if rid and column == self.CHART and item.flags() & Qt.ItemFlag.ItemIsUserCheckable:
             self.chart_toggled.emit(rid, not item.data(self.CHART, _ID))
 
+    def _current(self, item: QTreeWidgetItem | None, _prev=None) -> None:
+        if self.pick_device and item is not None and not self._updating:
+            self.device_selected.emit(self.device_of(item))
+
+    @staticmethod
+    def device_of(item: QTreeWidgetItem) -> str:
+        while item.parent() is not None:
+            item = item.parent()
+        return item.data(0, _KEY) or OVERVIEW
+
+    def current_reading(self) -> str | None:
+        item = self.currentItem()
+        return item.data(0, _ID) if item is not None else None
+
+    def select_device(self, key: str) -> None:
+        """Highlight a device row without announcing it (the caller already knows)."""
+        cur = self.currentItem()
+        if cur is not None and self.device_of(cur) == key:
+            return
+        for i in range(self.topLevelItemCount()):
+            item = self.topLevelItem(i)
+            if item.data(0, _KEY) == key:
+                self._updating = True
+                self.setCurrentItem(item)
+                self._updating = False
+                return
+
+    def keyPressEvent(self, e):
+        if self.pick_device and e.key() == Qt.Key.Key_Escape:
+            self.select_device(OVERVIEW)
+            self.device_selected.emit(OVERVIEW)
+            return
+        super().keyPressEvent(e)
+
     def _expanded(self, item: QTreeWidgetItem, collapsed: bool) -> None:
         key = item.data(0, _KEY)
         if key and not self._updating:
@@ -246,6 +296,11 @@ class SensorTree(QTreeWidget):
                     chart = bool(item.data(self.CHART, _ID))
                     menu.addAction("Remove chart" if chart else "Show chart",
                                    lambda: self.chart_toggled.emit(rid, not chart))
+                if self.overview_ids is not None:
+                    shown = rid in self.overview_ids
+                    menu.addAction(theme.icon("overview", theme.MUTED, 16),
+                                   "Remove from the overview" if shown else "Add to the overview",
+                                   lambda: self.overview_toggled.emit(rid, not shown))
                 on = item.checkState(self.WIDGET) == Qt.CheckState.Checked
                 menu.addAction("Remove from widget" if on else "Show in widget",
                                lambda: item.setCheckState(self.WIDGET, Qt.CheckState.Unchecked if on

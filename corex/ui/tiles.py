@@ -61,10 +61,12 @@ class Tile(QFrame):
     closed = Signal(str)             # first reading id (closable tiles only)
 
     def __init__(self, device_id: str, reading_ids: list[str], show_device: bool = False,
-                 closable: bool = False, parent=None):
+                 closable: bool = False, clickable: bool | None = None,
+                 close_tip: str = "Remove this chart", parent=None):
+        """closable: a remove button shows while the mouse is over the tile."""
         super().__init__(parent)
         self.setObjectName("tile")
-        if not closable:
+        if not closable if clickable is None else clickable:
             self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.device_id, self.reading_ids, self.show_device = device_id, reading_ids, show_device
         self._kind: str | None = None
@@ -82,15 +84,20 @@ class Tile(QFrame):
         head = QHBoxLayout()
         head.setContentsMargins(0, 0, 0, 0)
         head.addWidget(self.title, 1)
+        self._close = None
         if closable:
-            close = QToolButton()
+            self._close = close = QToolButton()
             close.setIcon(theme.icon("close", theme.MUTED, 14))
             close.setAutoRaise(True)
             close.setFixedSize(22, 22)
             close.setStyleSheet("QToolButton { border: none; background: transparent; padding: 0; }"
                                 f"QToolButton:hover {{ background: {theme.PANEL_HI}; border-radius: 4px; }}")
-            close.setToolTip("Remove this chart")
+            close.setToolTip(close_tip)
             close.clicked.connect(lambda: self.closed.emit(self.reading_ids[0]))
+            keep = close.sizePolicy()
+            keep.setRetainSizeWhenHidden(True)        # the title row keeps its height
+            close.setSizePolicy(keep)
+            close.setVisible(False)
             head.addWidget(close)
         lay.addLayout(head)
         lay.addWidget(self.value)
@@ -99,6 +106,16 @@ class Tile(QFrame):
         lay.addWidget(self.chart, 1)
         self.setMinimumWidth(230)
         self.setFixedHeight(196)
+
+    def enterEvent(self, e):
+        if self._close is not None:
+            self._close.setVisible(True)
+        super().enterEvent(e)
+
+    def leaveEvent(self, e):
+        if self._close is not None:
+            self._close.setVisible(False)
+        super().leaveEvent(e)
 
     def mouseReleaseEvent(self, e):
         if e.button() == Qt.MouseButton.LeftButton:

@@ -186,6 +186,9 @@ _SVG = {
     "reset": '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>',
     "menu": '<path d="M4 7h16M4 12h16M4 17h16"/>',
     "chart": '<path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/>',
+    "hybrid": '<path d="M3 6h6M3 12h6M3 18h6"/><rect x="12" y="4" width="9" height="16" rx="1.5"/>'
+              '<path d="M14 15l2-3 1.5 1.5 2-3"/>',
+    "edit": '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
     "list": '<path d="M9 6h12M9 12h12M9 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/>',
     "close": '<path d="M6 6l12 12M18 6L6 18"/>',
     "bell": '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/>',
