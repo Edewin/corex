@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import os
 import sys
 
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 
@@ -22,7 +24,8 @@ from corex.ui.dashboard import MainWindow
 from corex.ui.dialogs import AlertDialog, ReportDialog
 from corex.ui.firstrun import FirstRunDialog
 from corex.ui.history import HistoryDialog
-from corex.ui.overlay import Overlay
+from corex.ui.overlay import Overlay, normalize_style
+from corex.ui.widgeteditor import WidgetEditor
 
 ICON_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "corex_icon.svg")
 
@@ -50,7 +53,11 @@ class CoreXApp:
 
         self.tray = None
         self._make_window()
-        self.overlay = Overlay(self.settings.widget_opacity)
+        self.editor: WidgetEditor | None = None
+        self._style_save = QTimer(singleShot=True, interval=400)       # sliders fire many times a second
+        self._style_save.timeout.connect(
+            lambda: self._save(widget_style=copy.deepcopy(self.overlay.art.style)))
+        self.overlay = Overlay(normalize_style(self.settings.widget_style, self.settings.widget_opacity))
         if self.settings.widget_readings is not None:
             self.overlay.set_readings(self.settings.widget_readings)
         if self.settings.widget_pos:
@@ -62,7 +69,8 @@ class CoreXApp:
         o.choose_values.connect(self._choose_values)
         o.hide_requested.connect(lambda: self.set_widget_visible(False))
         o.quit_requested.connect(self.quit)
-        o.opacity_changed.connect(lambda v: self._save(widget_opacity=v))
+        o.edit_requested.connect(self.edit_widget)
+        o.style_changed.connect(self._style_save.start)
         o.moved.connect(lambda x, y: self._save(widget_pos=[x, y]))
 
         self.poller = Poller(self.engine, self.settings.interval_s)
@@ -94,6 +102,7 @@ class CoreXApp:
         w.history_requested.connect(self.show_history)
         w.alert_requested.connect(self.edit_alert)
         w.report_requested.connect(self.show_report)
+        w.edit_widget_requested.connect(self.edit_widget)
 
     def set_theme(self, mode: str) -> None:
         """Switch the colours; the main window is rebuilt so every icon and chart takes them."""
@@ -102,6 +111,9 @@ class CoreXApp:
         theme.apply(mode)
         self.app.setPalette(theme.palette())
         self.app.setStyleSheet(theme.STYLESHEET)
+        if self.editor is not None:
+            self.editor.close()
+            self.editor = None
         old = self.window
         was_visible = old.isVisible()
         old.hide_on_close = True               # closing the old one must not quit
@@ -161,6 +173,7 @@ class CoreXApp:
         menu = QMenu()
         menu.addAction("Open CoreX", self.show_window)
         self.tray_widget_action = menu.addAction("Show widget", self.toggle_widget)
+        menu.addAction("Edit widget…", self.edit_widget)
         menu.addSeparator()
         menu.addAction("Quit CoreX", self.quit)
         self.tray.setContextMenu(menu)
@@ -250,6 +263,16 @@ class CoreXApp:
             self.tray_widget_action.setText("Hide widget" if visible else "Show widget")
         if self.settings.widget_visible != visible:
             self._save(widget_visible=visible)
+
+    def edit_widget(self) -> None:
+        self.set_widget_visible(True)
+        if self.editor is None:
+            self.editor = WidgetEditor(self.overlay)
+            self.editor.changed.connect(self._style_save.start)
+            self.editor.finished.connect(lambda _: setattr(self, 'editor', None))
+        self.editor.show()
+        self.editor.raise_()
+        self.editor.activateWindow()
 
     def toggle_widget(self) -> None:
         self.set_widget_visible(not self.overlay.isVisible())

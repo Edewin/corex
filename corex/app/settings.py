@@ -23,7 +23,8 @@ class Settings:
     widget_readings: list[str] | None = None                      # None = pick on first run
     widget_pos: list[int] | None = None
     widget_visible: bool = True
-    widget_opacity: float = 0.92
+    widget_opacity: float = 0.92                                  # before 2.2: became widget_style background
+    widget_style: dict = field(default_factory=dict)              # look and layout, see ui/overlay.py
     last_page: str = "overview"
     view_mode: str | None = None                                  # "list" / "dashboard"; None = ask on first run
     hidden: list[str] = field(default_factory=list)               # reading ids hidden from the tables

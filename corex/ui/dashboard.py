@@ -194,6 +194,7 @@ class MainWindow(QMainWindow):
     history_requested = Signal(str)      # reading id ("" = pick in the window)
     alert_requested = Signal(str)
     report_requested = Signal()
+    edit_widget_requested = Signal()
     theme_changed = Signal(str)
 
     def __init__(self, history: History, prefs: Settings):
@@ -354,6 +355,11 @@ class MainWindow(QMainWindow):
         report.triggered.connect(self.report_requested)
         menu.addAction(report)
         self.addAction(report)
+        edit_widget = QAction(theme.icon("widget", theme.TEXT, 16), "Edit widget…", self)
+        edit_widget.setShortcut("Ctrl+E")
+        edit_widget.triggered.connect(self.edit_widget_requested)
+        menu.addAction(edit_widget)
+        self.addAction(edit_widget)
         menu.addSeparator()
         menu.addAction("About CoreX", self.about_requested.emit)
         quit_action = QAction("Quit CoreX", self)
