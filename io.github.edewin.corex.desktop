@@ -1,6 +1,8 @@
 [Desktop Entry]
 Name=CoreX
+GenericName=Hardware Monitor
 Comment=Hardware Monitor for Linux
+Keywords=hardware;monitor;sensors;temperature;fan;cpu;gpu;
 Exec=corex
 Icon=io.github.edewin.corex
 Terminal=false

@@ -146,6 +146,9 @@ class Overlay(QWidget):
 
     def contextMenuEvent(self, e):
         menu = QMenu(self)
+        if QGuiApplication.platformName() == "wayland":
+            # native Wayland lets no window place itself or stay above the others
+            menu.addSection("Wayland: the widget cannot stay on top or keep its place")
         menu.addAction("Open CoreX", self.open_dashboard.emit)
         menu.addAction("Choose values…", self.choose_values.emit)
         sub = menu.addMenu("Opacity")

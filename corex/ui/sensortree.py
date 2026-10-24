@@ -139,6 +139,8 @@ class SensorTree(QTreeWidget):
             for gname, readings in groups:
                 g = QTreeWidgetItem(parent, [gname])
                 g.setFirstColumnSpanned(True)
+                kind = Kind.FAN if readings[0].kind == Kind.FAN_PCT else readings[0].kind
+                g.setIcon(0, theme.icon(kind, theme.KIND_COLORS.get(kind, theme.MUTED), 16))
                 g.setForeground(0, theme.qcolor(theme.MUTED))
                 g.setFont(0, bold)
                 g.setFlags(Qt.ItemFlag.ItemIsEnabled)

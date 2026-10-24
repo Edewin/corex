@@ -182,7 +182,8 @@ def main() -> None:
 
     # The floating widget can only be placed and kept on top through X11; on a Wayland
     # session run through XWayland unless the user picked a platform explicitly.
-    if os.environ.get("XDG_SESSION_TYPE") == "wayland" and os.environ.get("DISPLAY")             and "QT_QPA_PLATFORM" not in os.environ and "-platform" not in qt_args:
+    if os.environ.get("XDG_SESSION_TYPE") == "wayland" and os.environ.get("DISPLAY") \
+            and "QT_QPA_PLATFORM" not in os.environ and "-platform" not in qt_args:
         os.environ["QT_QPA_PLATFORM"] = "xcb;wayland"      # Wayland only if XWayland is missing
 
     app = QApplication([sys.argv[0]] + qt_args)
