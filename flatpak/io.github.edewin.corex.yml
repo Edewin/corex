@@ -23,6 +23,9 @@ finish-args:
   - --filesystem=/sys:ro
   # network counters of the real interfaces (CoreX itself never connects anywhere)
   - --share=network
+  # alerts as desktop notifications, and the tray icon
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.kde.StatusNotifierWatcher
 
 modules:
   - generated-sources.json

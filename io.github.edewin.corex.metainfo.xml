@@ -18,6 +18,11 @@
       <li>Every sensor of your PC in one list: CPU and GPU temperatures, fan speeds, voltages, power, clocks, disks and network, each with its minimum and maximum</li>
       <li>A dashboard with live charts per device, or charts only for the values you pick</li>
       <li>An always-on-top widget with the values you choose, visible while gaming, working or browsing</li>
+      <li>A widget editor: place every value where you want it, add icons, pick text sizes, the widget size, the background opacity and your own background image</li>
+      <li>History of every sensor for up to a year, with charts and CSV export</li>
+      <li>Alerts above or below any value, with a desktop notification</li>
+      <li>A system report of your hardware and readings, ready to paste in a forum post</li>
+      <li>Dark, light or system theme</li>
       <li>Rename sensors, hide the ones you do not need; CoreX remembers your layout</li>
       <li>Can start with your system, straight into the widget</li>
       <li>Light on resources: it reads the kernel directly, no background services</li>
@@ -71,6 +76,21 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="2.2.0" date="2026-10-24">
+      <description>
+        <ul>
+          <li>Widget editor: free placement of every value, icons, text sizes, widget size, background opacity and background image</li>
+          <li>Move the widget with Ctrl + drag, lock its position</li>
+          <li>History of every sensor (last hour to 30 days, kept up to a year) with CSV export</li>
+          <li>Alerts above or below any value, with a desktop notification</li>
+          <li>System report to copy or save</li>
+          <li>Dark, light or system theme</li>
+          <li>Icons on the sensor groups</li>
+        </ul>
+      </description>
+    </release>
+    <release version="2.1.0" date="2026-10-24"/>
+    <release version="2.0.1" date="2026-10-24"/>
     <release version="2.0.0" date="2026-10-22">
       <description>
         <p>A rewrite of CoreX.</p>

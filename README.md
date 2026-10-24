@@ -13,7 +13,14 @@ widget with the values you pick.
   - **List**: every sensor with value, min and max; charts on demand
   - **List + widget**: the same list plus the floating widget
   - **Dashboard**: devices on the left, live charts per device, full list underneath
-- **Floating widget** — always on top, draggable, adjustable opacity; tick any sensor to add it
+- **Floating widget** — always on top; tick any sensor to add it, Ctrl + drag to move it
+- **Widget editor** — place every value freely, pick icons and text sizes, set the size,
+  the background opacity and your own background image
+- **History** — every sensor recorded per minute (average and highest), charts from the last
+  hour to 30 days, CSV export; kept 7 days to 1 year
+- **Alerts** — above or below any value, with a desktop notification
+- **System report** — your hardware and its readings as text, ready to paste in a forum post
+- **Dark, light or system theme**
 - **Real names** — CPU, GPU, disks, network, batteries and board sensors named
   for what they are, not `temp1`; rename any of them from the list
 - **Your view is remembered** — hidden sensors, folded groups, charts and column widths
