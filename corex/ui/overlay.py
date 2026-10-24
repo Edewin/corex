@@ -41,7 +41,7 @@ DEFAULT_STYLE = {
     "locked": False,
     "items": {},               # reading id / TITLE -> item options, see ITEM_DEFAULT
 }
-ITEM_DEFAULT = {"icon": "none", "size": "M", "name": True, "bar": True}       # + "x", "y" in the free layout
+ITEM_DEFAULT = {"icon": "auto", "size": "M", "name": True, "bar": True}       # + "x", "y" in the free layout
 
 _ICON_NAMES = {k for k, _ in ICON_CHOICES}
 # readings whose kind says more than their device does

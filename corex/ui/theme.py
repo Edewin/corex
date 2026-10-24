@@ -188,6 +188,19 @@ _SVG = {
     "chart": '<path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/>',
     "hybrid": '<path d="M3 6h6M3 12h6M3 18h6"/><rect x="12" y="4" width="9" height="16" rx="1.5"/>'
               '<path d="M14 15l2-3 1.5 1.5 2-3"/>',
+    "align-left": '<path d="M4 3v18"/><rect x="7" y="6" width="12" height="4" rx="1"/>'
+                  '<rect x="7" y="14" width="7" height="4" rx="1"/>',
+    "align-right": '<path d="M20 3v18"/><rect x="5" y="6" width="12" height="4" rx="1"/>'
+                   '<rect x="10" y="14" width="7" height="4" rx="1"/>',
+    "align-top": '<path d="M3 4h18"/><rect x="6" y="7" width="4" height="12" rx="1"/>'
+                 '<rect x="14" y="7" width="4" height="7" rx="1"/>',
+    "spread": '<path d="M3 3h18M3 21h18"/><rect x="7" y="7" width="10" height="3" rx="1"/>'
+              '<rect x="7" y="14" width="10" height="3" rx="1"/>',
+    "columns1": '<rect x="7" y="4" width="10" height="16" rx="1.5"/>',
+    "columns2": '<rect x="3" y="4" width="8" height="16" rx="1.5"/><rect x="13" y="4" width="8" height="16" rx="1.5"/>',
+    "columns3": '<rect x="2" y="4" width="5.3" height="16" rx="1.2"/><rect x="9.3" y="4" width="5.3" height="16" rx="1.2"/>'
+                '<rect x="16.6" y="4" width="5.3" height="16" rx="1.2"/>',
+    "folder": '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
     "edit": '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
     "list": '<path d="M9 6h12M9 12h12M9 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/>',
     "close": '<path d="M6 6l12 12M18 6L6 18"/>',
