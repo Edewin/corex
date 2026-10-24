@@ -122,7 +122,7 @@ class Tile(QFrame):
             title = _title(first.label, first.kind)
             self.title.setText(f"{dev.name} · {title}" if self.show_device else title)
             self.value.setText(format_value(first.kind, first.value, first.text))
-            self.value.setStyleSheet(f"color: {theme.level_color(first.kind, first.value)}")
+            self.value.setStyleSheet(f"color: {theme.level_color(first.kind, first.value, first.id)}")
             if first.min is not None:
                 self.sub.setText(f"min {format_value(first.kind, first.min)}   "
                                  f"max {format_value(first.kind, first.max)}")

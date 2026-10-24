@@ -10,15 +10,18 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
 
 from corex import __version__
-from corex.app import autostart
+from corex.app import alerts, autostart, report
 from corex.app.poller import History, Poller
+from corex.app.recorder import Recorder
 from corex.app.settings import Settings
 from corex.core.engine import Engine
 from corex.core.model import Snapshot
 from corex.ui import pick, theme
 from corex.ui.about import AboutDialog
 from corex.ui.dashboard import MainWindow
+from corex.ui.dialogs import AlertDialog, ReportDialog
 from corex.ui.firstrun import FirstRunDialog
+from corex.ui.history import HistoryDialog
 from corex.ui.overlay import Overlay
 
 ICON_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "corex_icon.svg")
@@ -28,32 +31,33 @@ class CoreXApp:
     def __init__(self, app: QApplication, start_hidden: bool = False):
         self.app = app
         self.settings = Settings.load()
+        theme.apply(self.settings.theme)
+        app.setPalette(theme.palette())
+        app.setStyleSheet(theme.STYLESHEET)
+        app.styleHints().colorSchemeChanged.connect(
+            lambda _: self.set_theme("system") if self.settings.theme == "system" else None)
         self.history = History()
         self.engine = Engine(labels=self.settings.labels)
+        try:
+            self.recorder: Recorder | None = Recorder(keep_days=self.settings.history_days)
+        except Exception as e:        # read-only home, broken database: run without history
+            print(f"CoreX: history disabled ({e})", file=sys.stderr)
+            self.recorder = None
+        self.alerts = alerts.AlertWatcher()
         if self.settings.view_mode is None and not start_hidden:
             self.settings.view_mode, self.settings.widget_visible = FirstRunDialog.ask()
             self.settings.save()
 
-        self.window = MainWindow(self.history, self.settings)
+        self.tray = None
+        self._make_window()
         self.overlay = Overlay(self.settings.widget_opacity)
         if self.settings.widget_readings is not None:
             self.overlay.set_readings(self.settings.widget_readings)
-            self.window.widget_ids = set(self.settings.widget_readings)
         if self.settings.widget_pos:
             self.overlay.move(*self.settings.widget_pos)
         self._setup_tray()
 
-        w, o = self.window, self.overlay
-        w.interval_changed.connect(self._set_interval)
-        w.reset_minmax.connect(self.engine.reset_minmax)
-        w.toggle_widget.connect(self.toggle_widget)
-        w.renamed.connect(self._rename)
-        w.widget_toggled.connect(self._widget_toggled)
-        w.view_changed.connect(lambda m: self._save(view_mode=m))
-        w.prefs_changed.connect(self.settings.save)
-        w.autostart_changed.connect(self._set_autostart)
-        w.about_requested.connect(lambda: AboutDialog(w).exec())
-        w.quit_requested.connect(self.quit)
+        o = self.overlay
         o.open_dashboard.connect(self.show_window)
         o.choose_values.connect(self._choose_values)
         o.hide_requested.connect(lambda: self.set_widget_visible(False))
@@ -71,8 +75,85 @@ class CoreXApp:
         self.set_widget_visible(self.settings.widget_visible)
 
     # ------------------------------------------------------------------
+    def _make_window(self) -> None:
+        self.window = w = MainWindow(self.history, self.settings)
+        if self.settings.widget_readings is not None:
+            w.widget_ids = set(self.settings.widget_readings)
+        w.hide_on_close = self.tray is not None
+        w.interval_changed.connect(self._set_interval)
+        w.reset_minmax.connect(self.engine.reset_minmax)
+        w.toggle_widget.connect(self.toggle_widget)
+        w.renamed.connect(self._rename)
+        w.widget_toggled.connect(self._widget_toggled)
+        w.view_changed.connect(lambda m: self._save(view_mode=m))
+        w.prefs_changed.connect(self.settings.save)
+        w.autostart_changed.connect(self._set_autostart)
+        w.about_requested.connect(lambda: AboutDialog(w).exec())
+        w.quit_requested.connect(self.quit)
+        w.theme_changed.connect(self.set_theme)
+        w.history_requested.connect(self.show_history)
+        w.alert_requested.connect(self.edit_alert)
+        w.report_requested.connect(self.show_report)
+
+    def set_theme(self, mode: str) -> None:
+        """Switch the colours; the main window is rebuilt so every icon and chart takes them."""
+        if mode != self.settings.theme:
+            self._save(theme=mode)
+        theme.apply(mode)
+        self.app.setPalette(theme.palette())
+        self.app.setStyleSheet(theme.STYLESHEET)
+        old = self.window
+        was_visible = old.isVisible()
+        old.hide_on_close = True               # closing the old one must not quit
+        self.settings.last_page = old.page
+        self._make_window()
+        self.window.widget_btn.setChecked(self.overlay.isVisible())
+        if self.history.latest:
+            self.window.on_snapshot(self.history.latest)
+        if was_visible:
+            self.window.showMaximized()
+        old.hide()
+        old.deleteLater()
+        self.overlay.restyle()
+
+    def show_history(self, reading_id: str = "") -> None:
+        if self.recorder is None:
+            self.window.statusBar().showMessage("History is not available: CoreX cannot write its "
+                                                "history file in ~/.local/share/corex.", 10000)
+            return
+        self.recorder.flush()
+        dlg = HistoryDialog(self.recorder, reading_id or None, self.settings.history_days, self.window)
+        dlg.exec()
+        if dlg.keep_days != self.settings.history_days:
+            self._save(history_days=dlg.keep_days)
+
+    def edit_alert(self, reading_id: str) -> None:
+        snap = self.history.latest
+        dev = next((d for d in snap.devices if d.reading(reading_id)), None) if snap else None
+        if dev is None:
+            return
+        dlg = AlertDialog(dev.name, dev.reading(reading_id), self.settings.alerts.get(reading_id), self.window)
+        if dlg.exec() and dlg.result_rule is not None:
+            rules = dict(self.settings.alerts)
+            if dlg.result_rule:
+                rules[reading_id] = dlg.result_rule
+            else:
+                rules.pop(reading_id, None)
+            self._save(alerts=rules)
+            self._check_alerts(snap)
+            self.window.on_snapshot(snap)
+
+    def show_report(self) -> None:
+        if self.history.latest:
+            ReportDialog(report.build(self.history.latest), self.window).exec()
+
+    def _check_alerts(self, snap: Snapshot) -> None:
+        over, tell = self.alerts.check(snap, self.settings.alerts)
+        theme.alerting = over
+        for title, body in tell:
+            alerts.notify(title, body, self.tray)
+
     def _setup_tray(self) -> None:
-        self.tray = None
         if not QSystemTrayIcon.isSystemTrayAvailable():
             return
         self.tray = QSystemTrayIcon(self.app.windowIcon())
@@ -90,6 +171,14 @@ class CoreXApp:
 
     def _on_snapshot(self, snap: Snapshot) -> None:
         self.history.add(snap)
+        if self.recorder is not None:
+            try:
+                self.recorder.add(snap)
+            except Exception as e:    # disk full, database locked: keep monitoring
+                print(f"CoreX: history write failed ({e})", file=sys.stderr)
+        theme.alerting = set()
+        if self.settings.alerts:
+            self._check_alerts(snap)
         if self.settings.widget_readings is None:          # first run: sensible defaults
             self.settings.widget_readings = pick.default_widget(snap)
             self.overlay.set_readings(self.settings.widget_readings)
@@ -168,6 +257,8 @@ class CoreXApp:
     def quit(self) -> None:
         self._save(last_page=self.window.page)
         self.poller.stop()
+        if self.recorder is not None:
+            self.recorder.close()
         if self.tray:
             self.tray.hide()
         self.overlay.close()
@@ -195,7 +286,6 @@ def main() -> None:
     font = app.font()
     font.setPointSize(10)
     app.setFont(font)
-    app.setStyleSheet(theme.STYLESHEET)
     if os.path.exists(ICON_PATH):
         app.setWindowIcon(QIcon(ICON_PATH))
 

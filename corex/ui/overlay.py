@@ -101,7 +101,7 @@ class Overlay(QWidget):
                 continue
             name.setText(_short_name(dev.kind, dev.name, r.label, r.kind))
             value.setText(format_value(r.kind, r.value, r.text))
-            color = theme.level_color(r.kind, r.value)
+            color = theme.level_color(r.kind, r.value, r.id)
             value.setStyleSheet(f"color: {color}")
             pct = r.kind in (Kind.LOAD, Kind.FAN_PCT)
             bar.setVisible(pct)
@@ -117,6 +117,10 @@ class Overlay(QWidget):
             if screen:
                 area = screen.availableGeometry()
                 self.move(area.right() - self.width() - 24, area.top() + 24)
+
+    def restyle(self) -> None:
+        """Colours changed (theme switch)."""
+        self.update()
 
     # -- painting & mouse --------------------------------------------------
     def paintEvent(self, _):

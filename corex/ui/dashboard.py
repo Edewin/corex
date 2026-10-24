@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QActionGroup
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -191,6 +191,10 @@ class MainWindow(QMainWindow):
     prefs_changed = Signal()             # hidden / collapsed / charts / columns changed in prefs
     about_requested = Signal()
     quit_requested = Signal()
+    history_requested = Signal(str)      # reading id ("" = pick in the window)
+    alert_requested = Signal(str)
+    report_requested = Signal()
+    theme_changed = Signal(str)
 
     def __init__(self, history: History, prefs: Settings):
         super().__init__()
@@ -245,6 +249,8 @@ class MainWindow(QMainWindow):
             tree.hide_toggled.connect(lambda rid, on: self._toggle_pref("hidden", rid, on))
             tree.collapsed_changed.connect(lambda k, on: self._toggle_pref("collapsed", k, on, refresh=False))
             tree.widths_changed.connect(lambda w, key=key: self._set_widths(key, w))
+            tree.history_requested.connect(self.history_requested)
+            tree.alert_requested.connect(self.alert_requested)
         for page in (self.overview, self.device_page, self.list_page):
             self.stack.addWidget(page)
         mv.addWidget(self.stack, 1)
@@ -254,7 +260,7 @@ class MainWindow(QMainWindow):
         sb = self.statusBar()
         self.status_sensors = QLabel()
         self.status_hint = QLabel()
-        self.status_hint.setStyleSheet("color: #ffb547;")
+        self.status_hint.setStyleSheet(f"color: {theme.WARN};")
         self.status_time = QLabel()
         sb.addWidget(self.status_sensors)
         sb.addWidget(self.status_hint, 1)
@@ -330,6 +336,24 @@ class MainWindow(QMainWindow):
         self.autostart_action.setChecked(self.prefs.autostart)
         self.autostart_action.toggled.connect(self.autostart_changed)
         menu.setToolTipsVisible(True)
+        themes = menu.addMenu(theme.icon("theme", theme.TEXT, 16), "Theme")
+        group = QActionGroup(themes)
+        for mode, text in (("dark", "Dark"), ("light", "Light"), ("system", "Same as the system")):
+            a = QAction(text, themes, checkable=True, checked=self.prefs.theme == mode)
+            a.triggered.connect(lambda _=False, m=mode: self.theme_changed.emit(m))
+            group.addAction(a)
+            themes.addAction(a)
+        menu.addSeparator()
+        history = QAction(theme.icon("history", theme.TEXT, 16), "History…", self)
+        history.setShortcut("Ctrl+H")
+        history.triggered.connect(lambda: self.history_requested.emit(""))
+        menu.addAction(history)
+        self.addAction(history)
+        report = QAction(theme.icon("report", theme.TEXT, 16), "System report…", self)
+        report.setShortcut("Ctrl+R")
+        report.triggered.connect(self.report_requested)
+        menu.addAction(report)
+        self.addAction(report)
         menu.addSeparator()
         menu.addAction("About CoreX", self.about_requested.emit)
         quit_action = QAction("Quit CoreX", self)
@@ -454,6 +478,8 @@ class MainWindow(QMainWindow):
             self._refresh_page(self.history.latest)
 
     def _refresh_page(self, snap: Snapshot) -> None:
+        alert_ids = set(self.prefs.alerts)
+        self.list_page.tree.alert_ids = self.device_page.table.alert_ids = alert_ids
         page = self.stack.currentWidget()
         if page is self.list_page:
             self.list_page.refresh(snap, self.history, self.widget_ids, self.prefs)

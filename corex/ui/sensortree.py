@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QMenu, QTreeWidget, QTreeWidgetItem
 
 from corex.core.model import Device, Kind
@@ -12,6 +12,7 @@ from corex.ui import theme
 
 _ID = Qt.ItemDataRole.UserRole            # reading id on reading rows
 _KEY = Qt.ItemDataRole.UserRole + 1       # collapse key on device / group rows
+_BELL = Qt.ItemDataRole.UserRole + 2      # reading row shows the alert bell
 
 
 def group_key(device_id: str, group: str) -> str:
@@ -25,6 +26,8 @@ class SensorTree(QTreeWidget):
     hide_toggled = Signal(str, bool)      # reading id, hidden
     collapsed_changed = Signal(str, bool)  # device / group key, collapsed
     widths_changed = Signal(list)         # widths of Value, Min, Max
+    history_requested = Signal(str)
+    alert_requested = Signal(str)
 
     COLS = ("Sensor", "Value", "Min", "Max", "Chart", "Widget")
     VALUE, MIN, MAX, CHART, WIDGET = 1, 2, 3, 4, 5
@@ -63,6 +66,7 @@ class SensorTree(QTreeWidget):
         h.sectionResized.connect(lambda c, *_: self._width_timer.start() if c in (1, 2, 3) and not self._updating else None)
 
         self._items: dict[str, QTreeWidgetItem] = {}
+        self.alert_ids: set[str] = set()      # readings with an alert set
         self._signature: tuple = ()
         self._updating = False
         self._mono = theme.mono_font(10)
@@ -101,12 +105,16 @@ class SensorTree(QTreeWidget):
                         item.setText(0, r.label)
                     item.setText(self.VALUE, format_value(r.kind, r.value, r.text))
                     if r.id not in hidden:
-                        item.setForeground(self.VALUE, theme.qcolor(theme.level_color(r.kind, r.value)))
+                        item.setForeground(self.VALUE, theme.qcolor(theme.level_color(r.kind, r.value, r.id)))
                     if r.kind != Kind.INFO:
                         item.setText(self.MIN, format_value(r.kind, r.min))
                         item.setText(self.MAX, format_value(r.kind, r.max))
                         item.setCheckState(self.WIDGET, Qt.CheckState.Checked if r.id in widget_ids
                                            else Qt.CheckState.Unchecked)
+                        bell = r.id in self.alert_ids
+                        if bool(item.data(0, _BELL)) != bell:
+                            item.setData(0, _BELL, bell)
+                            item.setIcon(0, theme.icon("bell", theme.WARN, 14) if bell else QIcon())
                         on = r.id in chart_ids
                         if item.data(self.CHART, _ID) != on:
                             item.setData(self.CHART, _ID, on)
@@ -230,6 +238,10 @@ class SensorTree(QTreeWidget):
                 f"{item.text(0)}: {item.text(self.VALUE)}"))
             if item.flags() & Qt.ItemFlag.ItemIsUserCheckable:
                 menu.addSeparator()
+                menu.addAction(theme.icon("chart", theme.MUTED, 16), "History…", lambda: self.history_requested.emit(rid))
+                menu.addAction(theme.icon("bell", theme.MUTED, 16),
+                               "Change alert…" if item.data(0, _BELL) else "Alert…",
+                               lambda: self.alert_requested.emit(rid))
                 if not self.isColumnHidden(self.CHART):
                     chart = bool(item.data(self.CHART, _ID))
                     menu.addAction("Remove chart" if chart else "Show chart",

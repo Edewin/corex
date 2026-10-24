@@ -32,6 +32,9 @@ class Settings:
     charts: list[str] = field(default_factory=list)               # reading ids charted in the List view
     columns: dict[str, list[int]] = field(default_factory=dict)   # table -> widths of Value, Min, Max
     autostart: bool = False
+    theme: str = "dark"                                           # "dark" / "light" / "system"
+    history_days: int = 30
+    alerts: dict[str, dict] = field(default_factory=dict)         # reading id -> {"above": x, "below": y}
 
     @classmethod
     def load(cls, path: Path | None = None) -> Settings:
@@ -46,6 +49,8 @@ class Settings:
             s.interval_s = 1.0
         if s.view_mode not in VIEW_MODES:
             s.view_mode = None
+        if s.theme not in ("dark", "light", "system"):
+            s.theme = "dark"
         return s
 
     def save(self, path: Path | None = None) -> None:
