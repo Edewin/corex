@@ -160,7 +160,8 @@ class Art:
             o = self.opts(e.id)
             nf, vf = self._fonts(o["size"])
             if o["name"]:
-                name_w = max(name_w, QFontMetricsF(nf).horizontalAdvance(e.name))
+                # a little spare: text drawn at a higher pixel ratio can come out wider than measured
+                name_w = max(name_w, QFontMetricsF(nf).horizontalAdvance(e.name) * 1.04 + 2)
             vm = QFontMetricsF(vf)
             # digits as 8s: the box does not jump when 9 % becomes 10 %
             key = (e.id, o["size"])
