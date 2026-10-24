@@ -9,13 +9,17 @@ widget with the values you pick.
 ![CoreX dashboard](corex/assets/screenshots/dashboard.png)
 
 ## Features
-- **Three ways to see it** — chosen at first start, switched any time:
+- **Four ways to see it** — chosen at first start, switched any time:
   - **List**: every sensor with value, min and max; charts on demand
   - **List + widget**: the same list plus the floating widget
+  - **Hybrid**: the full list on the left, live charts on the right — of the device you click,
+    or the overview of all of them
   - **Dashboard**: devices on the left, live charts per device, full list underneath
+- **Your own overview** — choose its charts and their order, or right-click any sensor › Add to the overview
 - **Floating widget** — always on top; tick any sensor to add it, Ctrl + drag to move it
-- **Widget editor** — place every value freely, pick icons and text sizes, set the size,
-  the background opacity and your own background image
+- **Widget editor** — place every value freely (edges stick to the other values), align several at
+  once or arrange them in 1-3 columns, pick icons and text sizes, set the size,
+  the background opacity and a background picture from the gallery or your own file
 - **History** — every sensor recorded per minute (average and highest), charts from the last
   hour to 30 days, CSV export; kept 7 days to 1 year
 - **Alerts** — above or below any value, with a desktop notification

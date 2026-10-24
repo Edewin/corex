@@ -16,9 +16,10 @@
     <p>CoreX is a lightweight hardware monitor for Linux that keeps you informed about your system's health at all times.</p>
     <ul>
       <li>Every sensor of your PC in one list: CPU and GPU temperatures, fan speeds, voltages, power, clocks, disks and network, each with its minimum and maximum</li>
-      <li>A dashboard with live charts per device, or charts only for the values you pick</li>
+      <li>A dashboard with live charts per device, a hybrid view with the full list next to the charts, or charts only for the values you pick</li>
+      <li>An overview you put together yourself: choose its charts and their order</li>
       <li>An always-on-top widget with the values you choose, visible while gaming, working or browsing</li>
-      <li>A widget editor: place every value where you want it, add icons, pick text sizes, the widget size, the background opacity and your own background image</li>
+      <li>A widget editor: place every value where you want it, align them or arrange them in columns, add icons, pick text sizes, the widget size, the background opacity and a background picture</li>
       <li>History of every sensor for up to a year, with charts and CSV export</li>
       <li>Alerts above or below any value, with a desktop notification</li>
       <li>A system report of your hardware and readings, ready to paste in a forum post</li>
@@ -76,6 +77,17 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="2.3.0" date="2026-10-24">
+      <description>
+        <ul>
+          <li>Hybrid view: every sensor on the left, live charts on the right for the device you click, or the overview</li>
+          <li>Choose the charts of the overview and their order, in the Hybrid and Dashboard views</li>
+          <li>Widget editor: edges stick to the other values with a guide, pick several values to align or space them evenly, arrange everything in 1, 2 or 3 columns</li>
+          <li>Background gallery for the widget, with pictures and drawn backgrounds, or your own file</li>
+          <li>Icons next to the widget values by default</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.2.0" date="2026-10-24">
       <description>
         <ul>
