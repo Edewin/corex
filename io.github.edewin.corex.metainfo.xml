@@ -45,24 +45,28 @@
 
   <screenshots>
     <screenshot type="default">
+      <caption>Always-on-top widget on your desktop</caption>
+      <image>https://raw.githubusercontent.com/Edewin/corex/2f6e1c2f8bfff60091fac9f14873a9c04ea72655/corex/assets/screenshots/widget-desktop.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Hybrid view: every sensor next to the charts of the device you pick</caption>
+      <image>https://raw.githubusercontent.com/Edewin/corex/2f6e1c2f8bfff60091fac9f14873a9c04ea72655/corex/assets/screenshots/hybrid.png</image>
+    </screenshot>
+    <screenshot>
       <caption>Dashboard with live charts</caption>
-      <image>https://raw.githubusercontent.com/Edewin/corex/7056eeccd7c3cd95de611ddb3d417a31401ba0b9/corex/assets/screenshots/dashboard.png</image>
+      <image>https://raw.githubusercontent.com/Edewin/corex/2f6e1c2f8bfff60091fac9f14873a9c04ea72655/corex/assets/screenshots/dashboard.png</image>
     </screenshot>
     <screenshot>
       <caption>Every sensor in one list, charts on demand</caption>
-      <image>https://raw.githubusercontent.com/Edewin/corex/7056eeccd7c3cd95de611ddb3d417a31401ba0b9/corex/assets/screenshots/list.png</image>
+      <image>https://raw.githubusercontent.com/Edewin/corex/2f6e1c2f8bfff60091fac9f14873a9c04ea72655/corex/assets/screenshots/list.png</image>
     </screenshot>
     <screenshot>
       <caption>Device page</caption>
-      <image>https://raw.githubusercontent.com/Edewin/corex/7056eeccd7c3cd95de611ddb3d417a31401ba0b9/corex/assets/screenshots/device.png</image>
-    </screenshot>
-    <screenshot>
-      <caption>Always-on-top widget</caption>
-      <image>https://raw.githubusercontent.com/Edewin/corex/7056eeccd7c3cd95de611ddb3d417a31401ba0b9/corex/assets/screenshots/widget.png</image>
+      <image>https://raw.githubusercontent.com/Edewin/corex/2f6e1c2f8bfff60091fac9f14873a9c04ea72655/corex/assets/screenshots/device.png</image>
     </screenshot>
     <screenshot>
       <caption>First start: choose your view</caption>
-      <image>https://raw.githubusercontent.com/Edewin/corex/7056eeccd7c3cd95de611ddb3d417a31401ba0b9/corex/assets/screenshots/firstrun.png</image>
+      <image>https://raw.githubusercontent.com/Edewin/corex/2f6e1c2f8bfff60091fac9f14873a9c04ea72655/corex/assets/screenshots/firstrun.png</image>
     </screenshot>
   </screenshots>
 

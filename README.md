@@ -6,7 +6,7 @@ A hardware monitor for Linux: every sensor in one list with current, minimum
 and maximum values, live charts when you want them, and a small always-on-top
 widget with the values you pick.
 
-![CoreX dashboard](corex/assets/screenshots/dashboard.png)
+![CoreX widget on the desktop](corex/assets/screenshots/widget-desktop.png)
 
 ## Features
 - **Four ways to see it** — chosen at first start, switched any time:
@@ -34,14 +34,17 @@ widget with the values you pick.
 
 ## Screenshots
 
+### Hybrid view
+![CoreX hybrid view](corex/assets/screenshots/hybrid.png)
+
+### Dashboard
+![CoreX dashboard](corex/assets/screenshots/dashboard.png)
+
 ### List with charts on demand
 ![CoreX list view](corex/assets/screenshots/list.png)
 
 ### Device page
 ![CoreX device page](corex/assets/screenshots/device.png)
-
-### Floating widget
-![CoreX widget](corex/assets/screenshots/widget.png)
 
 ### First start
 ![CoreX first start](corex/assets/screenshots/firstrun.png)
